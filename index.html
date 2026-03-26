@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="description" content="Global Seismic Hazard Map - Peak Ground Acceleration (PGA) data from GEM Foundation">
+    <meta name="theme-color" content="#f5f7fa">
+    <title>Global Seismic Hazard Map | GEM Foundation</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">🌍</span>
+                <h1>Global Seismic Hazard Map</h1>
+            </div>
+            <div class="header-badge">
+                <span class="badge">GEM v2023.1</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar - Fixed Left Panel -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h2>Hazard Information</h2>
+                </div>
+                
+                <div class="sidebar-content">
+                    <div class="info-card">
+                        <p class="description">Peak Ground Acceleration (PGA) with 10% probability of exceedance in 50 years</p>
+                        <p class="reference">Reference rock conditions (Vs30 = 760-800 m/s)</p>
+                    </div>
+
+                    <div class="legend-section">
+                        <h3>PGA Range (g)</h3>
+                        <div class="legend-list" id="legendList"></div>
+                    </div>
+
+                    <div class="stats-card" id="statsCard" style="display: none;">
+                        <h3>📍 Location Hazard</h3>
+                        <div class="stats-content">
+                            <div class="stat-item">
+                                <span class="stat-label">PGA Value</span>
+                                <span class="stat-value" id="statPGA">--</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Hazard Level</span>
+                                <span class="stat-level" id="statLevel">--</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Coordinates</span>
+                                <span class="stat-coords" id="statCoords">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-card">
+                        <h3>Data Source</h3>
+                        <p><strong>GEM Foundation</strong> v2023.1</p>
+                        <p><a href="https://doi.org/10.5281/zenodo.8409647" target="_blank" rel="noopener noreferrer">DOI: 10.5281/zenodo.8409647</a></p>
+                        <p class="license">License: CC BY-NC-SA 4.0</p>
+                    </div>
+
+                    <div class="info-card citation">
+                        <h3>Citation</h3>
+                        <p class="citation-text">Johnson, K., et al. (2023). Global Earthquake Model (GEM) Seismic Hazard Map (version 2023.1)</p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Map Container -->
+            <div class="map-wrapper">
+                <div id="map"></div>
+                
+                <!-- Layer Panel - On Map Window -->
+                <div class="layer-panel-map" id="layerPanel">
+                    <div class="layer-panel-header">
+                        <span>🗺️ Layers</span>
+                        <button class="layer-panel-toggle" id="layerPanelToggle">−</button>
+                    </div>
+                    <div class="layer-panel-content" id="layerPanelContent">
+                        <div class="layer-group">
+                            <div class="layer-group-title">Basemaps</div>
+                            <div class="layer-option">
+                                <label>
+                                    <input type="radio" name="basemap" value="light" checked>
+                                    <span>🗺️ Light</span>
+                                </label>
+                            </div>
+                            <div class="layer-option">
+                                <label>
+                                    <input type="radio" name="basemap" value="dark">
+                                    <span>🌙 Dark</span>
+                                </label>
+                            </div>
+                            <div class="layer-option">
+                                <label>
+                                    <input type="radio" name="basemap" value="satellite">
+                                    <span>🛰️ Satellite</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="layer-group">
+                            <div class="layer-group-title">Overlays</div>
+                            <div class="layer-option">
+                                <label>
+                                    <input type="checkbox" id="hazardLayerToggle" checked>
+                                    <span>⚠️ Seismic Hazard</span>
+                                </label>
+                            </div>
+                            <div class="layer-option">
+                                <label>
+                                    <input type="checkbox" id="countryBoundaryToggle">
+                                    <span>🌍 Country Boundaries</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="layer-opacity" id="opacityControl">
+                            <span>Hazard Opacity</span>
+                            <input type="range" id="opacitySlider" min="0" max="100" value="75">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Bar -->
+                <div class="search-container">
+                    <div class="search-box">
+                        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="searchInput" placeholder="Search city, country, or coordinates (e.g., 40.7128, -74.0060)" autocomplete="off">
+                        <button class="clear-btn" id="clearSearchBtn" style="display: none;">✕</button>
+                    </div>
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+
+                <!-- Controls Group -->
+                <div class="controls-group">
+                    <select id="countrySelect" class="control-select">
+                        <option value="">🌍 Select a country...</option>
+                    </select>
+                    <button id="currentLocationBtn" class="control-btn location-icon-only" title="My Location">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                    </button>
+                    <button id="resetViewBtn" class="control-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                            <path d="M3 3v5h5"></path>
+                        </svg>
+                        Reset
+                    </button>
+                </div>
+
+                <!-- Coordinates Display (bottom middle) -->
+                <div class="coords-display" id="coordsDisplay">
+                    <span>Lat: --°</span>
+                    <span>Lng: --°</span>
+                </div>
+
+                <!-- Status (bottom right) -->
+                <div class="map-status" id="mapStatus">
+                    <span class="status-dot"></span>
+                    <span id="statusText">Initializing...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
