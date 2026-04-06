@@ -1,7 +1,7 @@
 /**
- * Global Seismic Hazard Map - Professional Version (Robust)
+ * Global Seismic Hazard Map - Professional Version with Fault Line Analysis
  * GEM Foundation v2023.1
- * Handles map visualization, location search, and seismic hazard data display
+ * Handles map visualization, location search, seismic hazard data, and fault distance calculation
  * Supports local tile loading from 'tiles' folder
  */
 
@@ -128,6 +128,7 @@
   let currentNominatimRequest = null;
   let faultLoading = false;
   let tileErrorCount = 0;
+  let currentFaultInfo = null;
 
   // ==================== HELPER FUNCTIONS ====================
   function formatCoordinates(lat, lng) {
@@ -149,6 +150,134 @@
       if (isReady) statusDot.classList.add("active");
       else statusDot.classList.remove("active");
     }
+  }
+
+  // ==================== FAULT DISTANCE CALCULATION ====================
+  function calculateDistanceToNearestFault(lat, lng) {
+    if (
+      !faultLayer ||
+      !faultLayer.getLayers ||
+      faultLayer.getLayers().length === 0
+    ) {
+      return {
+        distance: null,
+        nearestFault: null,
+        message: "Fault data not loaded",
+      };
+    }
+
+    let minDistance = Infinity;
+    let nearestFaultName = null;
+    let nearestFaultType = null;
+    let nearestPoint = null;
+
+    const clickPoint = turf.point([lng, lat]);
+
+    faultLayer.eachLayer(function (layer) {
+      if (layer.feature && layer.feature.geometry) {
+        try {
+          let coordinates;
+          if (layer.feature.geometry.type === "LineString") {
+            coordinates = layer.feature.geometry.coordinates;
+          } else if (layer.feature.geometry.type === "MultiLineString") {
+            coordinates = layer.feature.geometry.coordinates[0];
+          } else {
+            return;
+          }
+
+          const faultLine = turf.lineString(coordinates);
+          const distance = turf.pointToLineDistance(clickPoint, faultLine, {
+            units: "kilometers",
+          });
+          const nearest = turf.nearestPointOnLine(faultLine, clickPoint);
+
+          if (distance < minDistance) {
+            minDistance = distance;
+            const props = layer.feature.properties || {};
+            nearestFaultName =
+              props.name || props.Name || props.fault_name || "Unnamed Fault";
+            nearestFaultType = props.slip_type || props.slipType || "Unknown";
+            nearestPoint = nearest.geometry.coordinates;
+          }
+        } catch (err) {
+          console.warn("Error calculating distance for fault:", err);
+        }
+      }
+    });
+
+    if (minDistance === Infinity) {
+      return { distance: null, nearestFault: null, message: "No faults found" };
+    }
+
+    return {
+      distance: minDistance,
+      nearestFault: nearestFaultName,
+      faultType: nearestFaultType,
+      nearestPoint: nearestPoint,
+      message: getFaultDistanceMessage(minDistance),
+    };
+  }
+
+  function getFaultDistanceMessage(distanceKm) {
+    if (distanceKm < 10) {
+      return "⚠️ CRITICAL: Very close to active fault! Special seismic design required.";
+    } else if (distanceKm < 30) {
+      return "⚠️ HIGH: Within 30km of active fault. Enhanced design recommended.";
+    } else if (distanceKm < 60) {
+      return "⚠️ MODERATE: Within 60km of fault. Standard seismic design advised.";
+    } else if (distanceKm < 100) {
+      return "✓ LOW: Beyond 60km from major faults. Regular seismic considerations apply.";
+    } else {
+      return "✓ VERY LOW: Far from known active faults.";
+    }
+  }
+
+  function getFaultRiskModifier(distanceKm) {
+    if (!distanceKm) return 0;
+    if (distanceKm < 10) return 3;
+    if (distanceKm < 30) return 2;
+    if (distanceKm < 60) return 1;
+    return 0;
+  }
+
+  function showFaultDistanceLine(clickLngLat, nearestPoint, faultName) {
+    if (window.faultDistanceLine) {
+      map.removeLayer(window.faultDistanceLine);
+    }
+    if (window.nearestFaultMarker) {
+      map.removeLayer(window.nearestFaultMarker);
+    }
+
+    if (!nearestPoint) return;
+
+    const latlngs = [
+      [clickLngLat[1], clickLngLat[0]],
+      [nearestPoint[1], nearestPoint[0]],
+    ];
+
+    window.faultDistanceLine = L.polyline(latlngs, {
+      color: "#ff3b2f",
+      weight: 2,
+      dashArray: "5, 5",
+      opacity: 0.7,
+    }).addTo(map);
+
+    window.nearestFaultMarker = L.circleMarker(
+      [nearestPoint[1], nearestPoint[0]],
+      {
+        radius: 6,
+        color: "#ff3b2f",
+        fillColor: "#ff0000",
+        fillOpacity: 0.8,
+      },
+    )
+      .addTo(map)
+      .bindTooltip(`Nearest point on ${faultName}`, { sticky: true });
+
+    setTimeout(() => {
+      if (window.faultDistanceLine) map.removeLayer(window.faultDistanceLine);
+      if (window.nearestFaultMarker) map.removeLayer(window.nearestFaultMarker);
+    }, 8000);
   }
 
   // ==================== HAZARD LOOKUP ====================
@@ -195,7 +324,7 @@
               imageData.data[3] === 0 ||
               (r === 255 && g === 255 && b === 255)
             ) {
-              resolve(getHazardEstimate(lat, lng));
+              resolve(null);
               return;
             }
 
@@ -261,7 +390,6 @@
   }
 
   function getHazardEstimate(lat, lng) {
-    // Ring of Fire - high seismic activity
     if (
       (lat > 20 && lat < 50 && lng > 130 && lng < 150) ||
       (lat > -10 && lat < 20 && lng > 120 && lng < 140) ||
@@ -270,21 +398,18 @@
     ) {
       return { pga: 0.65, level: "Extreme" };
     }
-    // Mediterranean-Himalayan belt
     if (
       (lat > 35 && lat < 45 && lng > 10 && lng < 30) ||
       (lat > 25 && lat < 40 && lng > 70 && lng < 90)
     ) {
       return { pga: 0.35, level: "Very High" };
     }
-    // Moderate zones
     if (
       (lat > 30 && lat < 45 && lng > 70 && lng < 85) ||
       (lat > -20 && lat < -5 && lng > -75 && lng < -60)
     ) {
       return { pga: 0.105, level: "High" };
     }
-    // Low-moderate zones
     if (
       (lat > 30 && lat < 45 && lng > -125 && lng < -110) ||
       (lat > 35 && lat < 50 && lng > -10 && lng < 20)
@@ -427,10 +552,7 @@
         });
       },
     }).addTo(map);
-
-    if (isHazardVisible && hazardLayer) {
-      hazardLayer.bringToFront();
-    }
+    fixLayerOrder();    
   }
 
   function removeCountryBoundaries() {
@@ -447,49 +569,24 @@
     updateStatus("Loading fault lines...", false);
 
     try {
-      // const response = await fetch('https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json');
-
-      // if (!response.ok) throw new Error('Failed to load fault data');
-
-      // const data = await response.json();
-
-      // faultLayer = L.geoJSON(data, {
-      //     style: {
-      //         color: '#ff3b2f',
-      //         weight: 2,
-      //         opacity: 0.85
-      //     },
-      //     className: 'fault-line',
-      //     onEachFeature: function (feature, layer) {
-      //         const name = feature.properties?.Name || feature.properties?.PlateName || "Plate Boundary";
-      //         layer.bindTooltip(name, { className: 'fault-tooltip', sticky: true });
-      //     }
-      // });
       const response = await fetch("data/faults.json");
       if (!response.ok) throw new Error("Failed to load fault data");
 
       const topoData = await response.json();
-
-      // Debug (check console once)
       console.log("TopoJSON objects:", Object.keys(topoData.objects));
 
-      // Auto-detect object (temporary)
       const objectName = Object.keys(topoData.objects)[0];
-
       const geojsonData = topojson.feature(
         topoData,
         topoData.objects[objectName],
       );
 
-      // Safety check
       if (!geojsonData || !geojsonData.features) {
         throw new Error("Invalid GeoJSON conversion");
       }
 
-      // Create fault layer
       faultLayer = L.geoJSON(geojsonData, {
         renderer: L.canvas(),
-
         style: {
           color: "#ff3b2f",
           weight: 2,
@@ -498,21 +595,16 @@
         className: "fault-line",
         onEachFeature: function (feature, layer) {
           const props = feature.properties || {};
+          const name =
+            props.name || props.Name || props.fault_name || "Unnamed Fault";
+          const slip = props.slip_type || props.slipType || "Unknown";
 
-          const name = props.name || "Unnamed Fault";
-          const slip = props.slip_type || "Unknown";
-
-          // Tooltip (hover)
           layer.bindTooltip(`<strong>${name}</strong><br>Slip: ${slip}`, {
             className: "fault-tooltip",
             sticky: true,
           });
 
-          // Popup (click)
-          layer.bindPopup(
-            `<strong>${name}</strong><br>
-         Slip Type: ${slip}`,
-          );
+          layer.bindPopup(`<strong>${name}</strong><br>Slip Type: ${slip}`);
         },
       });
 
@@ -580,16 +672,13 @@
     }
   }
 
-  function handleLegendVisibility() {
-    const legend = document.getElementById("legendSection");
-    if (!legend) return;
+function handleLegendVisibility() {
+  const legend = document.getElementById("legendSection");
+  if (!legend) return;
 
-    const currentZoom = map.getZoom();
-    const shouldShow = !(
-      currentZoom >= CONFIG.faultZoomThreshold && isFaultVisible
-    );
-    legend.style.display = shouldShow ? "block" : "none";
-  }
+  // Show legend ONLY if hazard is ON
+  legend.style.display = isHazardVisible ? "block" : "none";
+}
 
   // ==================== SEARCH & LOCATION ====================
   async function searchNominatim(query) {
@@ -660,14 +749,36 @@
     }).addTo(map);
 
     const hazard = await getHazardFromRaster(lat, lng);
+    let hazardText = "--";
+    let hazardLevel = "--";
+
+    if (hazard) {
+      hazardText = hazard.pga.toFixed(3);
+      hazardLevel = hazard.level;
+    }
+    const faultInfo = calculateDistanceToNearestFault(lat, lng);
+    currentFaultInfo = faultInfo;
+
     const displayName = fullAddress || name;
 
+    let faultHtml = "";
+    if (faultInfo.distance !== null) {
+      faultHtml = `<br><span style="color: #ff3b2f;">⚡ Nearest Fault: ${faultInfo.nearestFault}</span><br>
+                   <span>📏 Distance: ${faultInfo.distance.toFixed(2)} km</span><br>
+                   <span style="font-size: 0.8rem;">${faultInfo.message}</span>`;
+    }
+
     const popupContent = `
-            <strong>${escapeHtml(displayName)}</strong>${country ? `<br>${escapeHtml(country)}` : ""}<br>
-            ${formatCoordinates(lat, lng)}<br>
-            <span style="color: #d43f1a; font-weight: bold;">PGA: ${hazard.pga.toFixed(3)} g</span><br>
-            <span>Hazard Level: ${hazard.level}</span>
-        `;
+  <strong>${escapeHtml(displayName)}</strong>${country ? `<br>${escapeHtml(country)}` : ""}<br>
+  ${formatCoordinates(lat, lng)}<br>
+  ${
+    hazard
+      ? `<span style="color: #d43f1a; font-weight: bold;">PGA: ${hazard.pga.toFixed(3)} g</span><br>
+         <span>Hazard Level: ${hazard.level}</span>`
+      : `<span style="color: gray;">No seismic hazard data (ocean area)</span>`
+  }
+  ${faultHtml}
+`;
     currentMarker.bindPopup(popupContent).openPopup();
 
     map.flyTo([lat, lng], CONFIG.flyToZoom, { duration: CONFIG.flyToDuration });
@@ -679,14 +790,46 @@
     const statPGA = document.getElementById("statPGA");
     const statLevel = document.getElementById("statLevel");
     const statCoords = document.getElementById("statCoords");
+    const statFault = document.getElementById("statFault");
+    const statDistance = document.getElementById("statDistance");
     const riskPGA = document.getElementById("riskPGA");
+    const riskFault = document.getElementById("riskFault");
 
-    if (statPGA) statPGA.textContent = hazard.pga.toFixed(3);
-    if (riskPGA) riskPGA.textContent = hazard.pga.toFixed(3);
-    if (statLevel) statLevel.textContent = hazard.level;
+    if (statPGA) statPGA.textContent = hazardText;
+    if (riskPGA) riskPGA.textContent = hazardText;
+    if (statLevel) statLevel.textContent = hazardLevel;
     if (statCoords) statCoords.textContent = formatCoordinates(lat, lng);
+
+    if (statFault && faultInfo.nearestFault) {
+      statFault.textContent = faultInfo.nearestFault;
+    } else if (statFault) {
+      statFault.textContent = "No fault data";
+    }
+
+    if (statDistance && faultInfo.distance !== null) {
+      statDistance.textContent = `${faultInfo.distance.toFixed(2)} km`;
+    } else if (statDistance) {
+      statDistance.textContent = "--";
+    }
+
+    if (riskFault && faultInfo.nearestFault) {
+      riskFault.textContent = `${faultInfo.nearestFault} (${faultInfo.distance ? faultInfo.distance.toFixed(1) : "?"} km)`;
+    } else if (riskFault) {
+      riskFault.textContent = "No fault data";
+    }
+
     if (statsCard) statsCard.style.display = "block";
+
+    if (faultInfo.distance !== null && faultInfo.nearestPoint) {
+      showFaultDistanceLine(
+        [lng, lat],
+        faultInfo.nearestPoint,
+        faultInfo.nearestFault,
+      );
+    }
+    fixLayerOrder();
   }
+  
 
   // ==================== MAP INITIALIZATION ====================
   function addCustomZoomControl() {
@@ -694,9 +837,9 @@
     zoomControl.onAdd = function () {
       const div = L.DomUtil.create("div", "custom-zoom-control");
       div.innerHTML = `
-                <button class="zoom-in" aria-label="Zoom in">+</button>
-                <button class="zoom-out" aria-label="Zoom out">−</button>
-            `;
+        <button class="zoom-in" aria-label="Zoom in">+</button>
+        <button class="zoom-out" aria-label="Zoom out">−</button>
+      `;
       L.DomEvent.disableClickPropagation(div);
       div
         .querySelector(".zoom-in")
@@ -771,12 +914,7 @@
       subdomains: "abcd",
     }).addTo(map);
 
-    if (isHazardVisible && hazardLayer) {
-      hazardLayer.bringToFront();
-    }
-    if (countryBoundaryLayer) {
-      countryBoundaryLayer.bringToBack();
-    }
+    fixLayerOrder();
   }
 
   function toggleHazardLayer(visible) {
@@ -809,10 +947,10 @@
       const legendItem = document.createElement("div");
       legendItem.className = "legend-item";
       legendItem.innerHTML = `
-                <span class="color-box" style="background: rgb(${item.color[0]}, ${item.color[1]}, ${item.color[2]});"></span>
-                <span class="legend-range">${item.min.toFixed(2)} - ${item.max.toFixed(2)} g</span>
-                <span class="legend-level">${item.level}</span>
-            `;
+        <span class="color-box" style="background: rgb(${item.color[0]}, ${item.color[1]}, ${item.color[2]});"></span>
+        <span class="legend-range">${item.min.toFixed(2)} - ${item.max.toFixed(2)} g</span>
+        <span class="legend-level">${item.level}</span>
+      `;
       legendList.appendChild(legendItem);
     });
   }
@@ -890,14 +1028,14 @@
           let icon =
             r.type === "country" ? "🌍" : r.type === "coordinate" ? "📍" : "🏙️";
           return `
-                    <div class="result-item" data-index="${i}">
-                        <div class="result-icon">${icon}</div>
-                        <div class="result-content">
-                            <div class="result-name">${escapeHtml(r.name)}</div>
-                            <div class="result-coords">${r.lat.toFixed(4)}°, ${r.lng.toFixed(4)}°</div>
-                        </div>
-                    </div>
-                `;
+            <div class="result-item" data-index="${i}">
+              <div class="result-icon">${icon}</div>
+              <div class="result-content">
+                <div class="result-name">${escapeHtml(r.name)}</div>
+                <div class="result-coords">${r.lat.toFixed(4)}°, ${r.lng.toFixed(4)}°</div>
+              </div>
+            </div>
+          `;
         })
         .join("");
       searchResults.classList.add("show");
@@ -1013,6 +1151,9 @@
         const riskPGA = document.getElementById("riskPGA");
         if (riskPGA) riskPGA.textContent = "--";
 
+        const riskFault = document.getElementById("riskFault");
+        if (riskFault) riskFault.textContent = "--";
+
         const heightInput = document.getElementById("buildingHeight");
         if (heightInput) heightInput.value = "";
 
@@ -1021,6 +1162,8 @@
 
         const importanceSelect = document.getElementById("importanceLevel");
         if (importanceSelect) importanceSelect.value = "normal";
+
+        currentFaultInfo = null;
       });
     }
 
@@ -1146,12 +1289,14 @@
     currentBasemap = L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
       {
-        attribution: "&copy; OpenStreetMap &copy; CartoDB",
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors &copy; CartoDB',
         subdomains: "abcd",
       },
     ).addTo(map);
 
     createHazardLayer();
+
     L.control
       .scale({ imperial: false, metric: true, position: "bottomleft" })
       .addTo(map);
@@ -1176,26 +1321,35 @@
         parseInt(document.getElementById("buildingHeight").value) || 1;
       const importance = document.getElementById("importanceLevel").value;
 
+      let faultDistanceKm = null;
+      let faultModifier = 0;
+      if (currentFaultInfo && currentFaultInfo.distance !== null) {
+        faultDistanceKm = currentFaultInfo.distance;
+        faultModifier = getFaultRiskModifier(faultDistanceKm);
+      }
+
       let score = 0;
 
-      // PGA factor
       if (pga < 0.05) score += 1;
       else if (pga < 0.15) score += 2;
       else if (pga < 0.35) score += 3;
       else score += 4;
 
-      // Soil factor
       if (soil === "medium") score += 1;
       if (soil === "soft") score += 2;
 
-      // Height factor
       if (height > 3) score += 1;
       if (height > 7) score += 2;
       if (height > 12) score += 3;
 
-      // Importance factor
       if (importance === "important") score += 1;
       if (importance === "critical") score += 2;
+
+      let faultWarning = "";
+      if (faultModifier > 0) {
+        score += faultModifier;
+        faultWarning = `<br><span style="color: #ff3b2f;">⚠️ +${faultModifier} from fault proximity (${faultDistanceKm.toFixed(1)} km)</span>`;
+      }
 
       let risk = "",
         color = "",
@@ -1219,6 +1373,13 @@
         advice = "Advanced engineering required. Avoid conventional design.";
       }
 
+      if (faultDistanceKm !== null && faultDistanceKm < 30) {
+        advice += "<br><br><strong>🏚️ Fault Proximity Note:</strong><br>";
+        advice += "• Avoid surface rupture zones<br>";
+        advice += "• Use ductile detailing per IS 13920<br>";
+        advice += "• Consider base isolation for critical structures";
+      }
+
       if (importance === "critical") {
         advice += "<br><br><strong>Critical Infrastructure:</strong><br>";
         advice += "• Use base isolation<br>";
@@ -1229,12 +1390,12 @@
       const riskResult = document.getElementById("riskResult");
       if (riskResult) {
         riskResult.innerHTML = `
-                    <div style="padding:10px; border-radius:8px; border-left:5px solid ${color}; background:#f9f9f9;">
-                        <strong style="color:${color};">Risk Level: ${risk}</strong><br>
-                        Score: ${score}<br><br>
-                        ${advice}
-                    </div>
-                `;
+          <div style="padding:10px; border-radius:8px; border-left:5px solid ${color}; background:#f9f9f9;">
+            <strong style="color:${color};">Risk Level: ${risk}</strong><br>
+            Score: ${score}${faultWarning}<br><br>
+            ${advice}
+          </div>
+        `;
       }
     });
   }
@@ -1257,6 +1418,12 @@
       });
     }
   }
+ function fixLayerOrder() {
+  if (hazardLayer) hazardLayer.bringToFront();
+  if (countryBoundaryLayer) countryBoundaryLayer.bringToFront();
+  if (faultLayer) faultLayer.bringToFront();
+  if (currentMarker) currentMarker.bringToFront();
+}
 
   async function init() {
     console.log("Initializing Seismic Hazard Map with local tiles...");
@@ -1269,6 +1436,7 @@
     buildLegend();
     await loadCountriesFromGeoJSON();
     populateCountryDropdown();
+    addCountryBoundaries();
     setupEventListeners();
     setupSearch();
     setupRiskAnalysis();
