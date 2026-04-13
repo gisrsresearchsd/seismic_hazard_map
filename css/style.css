@@ -692,11 +692,24 @@ body {
   stroke: currentColor;
 }
 
-.location-icon-only, .reset-btn {
-  width: 40px;
-  height: 40px;
+.location-icon-only,
+.reset-btn {
+  width: 44px;
+  height: 44px;
   padding: 0;
   border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  line-height: 0; /* important for SVG alignment */
+}
+
+.control-btn svg {
+  width: 18px;
+  height: 18px;
+  display: block; /* removes inline spacing issues */
 }
 
 /* --------------------------------------------
@@ -969,10 +982,29 @@ body {
   background: var(--primary-dark);
 }
 
+/* Updated Risk Result Styles - Clean White Card */
 #riskResult {
-  margin-top: 12px;
+  margin-top: 16px;
   font-size: 0.85rem;
-  line-height: 1.4;
+  line-height: 1.5;
+}
+
+#riskResult > div {
+  background: #f8fafc !important;
+  border-radius: 12px !important;
+  padding: 14px !important;
+  border-left: 4px solid #2ecc71 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+}
+
+#riskResult > div:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+#riskResult strong {
+  color: #1a2a3a;
+  font-weight: 600;
 }
 
 #pgaDisplay, #faultDisplay {

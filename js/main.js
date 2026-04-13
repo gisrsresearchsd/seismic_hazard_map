@@ -1154,14 +1154,11 @@ function handleLegendVisibility() {
         const riskFault = document.getElementById("riskFault");
         if (riskFault) riskFault.textContent = "--";
 
-        const heightInput = document.getElementById("buildingHeight");
-        if (heightInput) heightInput.value = "";
+        const storiesInput = document.getElementById("buildingStories");
+        if (storiesInput) storiesInput.value = "";
 
-        const soilSelect = document.getElementById("soilType");
-        if (soilSelect) soilSelect.value = "rock";
-
-        const importanceSelect = document.getElementById("importanceLevel");
-        if (importanceSelect) importanceSelect.value = "normal";
+        const buildingTypeSelect = document.getElementById("buildingType");
+        if (buildingTypeSelect) buildingTypeSelect.value = "";
 
         currentFaultInfo = null;
       });
@@ -1234,6 +1231,7 @@ function handleLegendVisibility() {
         toggleHazardLayer(e.target.checked);
         if (opacityControl)
           opacityControl.style.display = e.target.checked ? "flex" : "none";
+        handleLegendVisibility();
       });
     }
 
@@ -1303,100 +1301,138 @@ function handleLegendVisibility() {
     updateStatus("Ready", true);
   }
 
+  // ==================== UPDATED RISK ANALYSIS LOGIC ====================
   function setupRiskAnalysis() {
     const analyzeBtn = document.getElementById("analyzeBtn");
     if (!analyzeBtn) return;
 
     analyzeBtn.addEventListener("click", () => {
+      // Get PGA value from the stat display
       const pgaElement = document.getElementById("statPGA");
-      const pga = parseFloat(pgaElement ? pgaElement.textContent : "NaN");
-
+      let pga = parseFloat(pgaElement ? pgaElement.textContent : "NaN");
+      
       if (isNaN(pga)) {
-        alert("Please click on the map first to select a location.");
+        const riskResult = document.getElementById("riskResult");
+        if (riskResult) {
+          riskResult.innerHTML = "Seismicity level is less than 0.01g";
+          riskResult.style.color = "orange";
+        }
         return;
       }
 
-      const soil = document.getElementById("soilType").value;
-      const height =
-        parseInt(document.getElementById("buildingHeight").value) || 1;
-      const importance = document.getElementById("importanceLevel").value;
+      // Get building parameters
+      const buildingType = document.getElementById("buildingType").value;
+      const stories = parseInt(document.getElementById("buildingStories").value) || 1;
 
-      let faultDistanceKm = null;
-      let faultModifier = 0;
-      if (currentFaultInfo && currentFaultInfo.distance !== null) {
-        faultDistanceKm = currentFaultInfo.distance;
-        faultModifier = getFaultRiskModifier(faultDistanceKm);
-      }
-
-      let score = 0;
-
-      if (pga < 0.05) score += 1;
-      else if (pga < 0.15) score += 2;
-      else if (pga < 0.35) score += 3;
-      else score += 4;
-
-      if (soil === "medium") score += 1;
-      if (soil === "soft") score += 2;
-
-      if (height > 3) score += 1;
-      if (height > 7) score += 2;
-      if (height > 12) score += 3;
-
-      if (importance === "important") score += 1;
-      if (importance === "critical") score += 2;
-
-      let faultWarning = "";
-      if (faultModifier > 0) {
-        score += faultModifier;
-        faultWarning = `<br><span style="color: #ff3b2f;">⚠️ +${faultModifier} from fault proximity (${faultDistanceKm.toFixed(1)} km)</span>`;
-      }
-
-      let risk = "",
-        color = "",
-        advice = "";
-
-      if (score <= 3) {
-        risk = "Low";
-        color = "green";
-        advice = "Safe for standard construction.";
-      } else if (score <= 6) {
-        risk = "Moderate";
-        color = "orange";
-        advice = "Use earthquake-resistant design.";
-      } else if (score <= 9) {
-        risk = "High";
-        color = "darkorange";
-        advice = "Strong structural reinforcement required.";
+      // Helper to get seismicity category
+      let seismicityCategory = "";
+      let seismicityDisplay = "";
+      
+      if (pga < 0.01) {
+        seismicityCategory = "null";
+        seismicityDisplay = "Null (less than 0.01g)";
+      } else if (pga >= 0.01 && pga < 0.03) {
+        seismicityCategory = "low";
+        seismicityDisplay = "Low (0.01g - 0.03g)";
+      } else if (pga >= 0.03 && pga <= 0.08) {
+        seismicityCategory = "moderate";
+        seismicityDisplay = "Moderate (0.03g - 0.08g)";
       } else {
-        risk = "Very High";
-        color = "red";
-        advice = "Advanced engineering required. Avoid conventional design.";
+        seismicityCategory = "high";
+        seismicityDisplay = "High (> 0.08g)";
       }
 
-      if (faultDistanceKm !== null && faultDistanceKm < 30) {
-        advice += "<br><br><strong>🏚️ Fault Proximity Note:</strong><br>";
-        advice += "• Avoid surface rupture zones<br>";
-        advice += "• Use ductile detailing per IS 13920<br>";
-        advice += "• Consider base isolation for critical structures";
+      // Determine recommendation based on building type and seismicity
+      let recommendation = "";
+      let recommendationType = ""; // "none", "tier1", or "tier3"
+
+      // Building type: URM or Wood (value "URM")
+      if (buildingType === "URM") {
+        if (seismicityCategory === "null") {
+          recommendation = "Seismicity level is less than 0.01g";
+          recommendationType = "none";
+        } else {
+          // For URM/Wood with any seismicity >= 0.01g
+          recommendation = "Recommended analysis: ASCE41 Tier 1";
+          recommendationType = "tier1";
+        }
+      }
+      // Building type: RC Frame / Shear Wall / Steel (value "RC")
+      else if (buildingType === "RC") {
+        if (seismicityCategory === "null") {
+          recommendation = "Seismicity level is less than 0.01g";
+          recommendationType = "none";
+        } else if (seismicityCategory === "low") {
+          recommendation = "Recommended analysis: ASCE41 Tier 1";
+          recommendationType = "tier1";
+        } else if (seismicityCategory === "moderate") {
+          if (stories <= 12) {
+            recommendation = "Recommended analysis: ASCE41 Tier 1";
+            recommendationType = "tier1";
+          } else {
+            recommendation = "Recommended analysis: ASCE41 Tier 3";
+            recommendationType = "tier3";
+          }
+        } else if (seismicityCategory === "high") {
+          if (stories <= 8) {
+            recommendation = "Recommended analysis: ASCE41 Tier 1";
+            recommendationType = "tier1";
+          } else {
+            recommendation = "Recommended analysis: ASCE41 Tier 3";
+            recommendationType = "tier3";
+          }
+        }
+      } else {
+        // No building type selected
+        const riskResult = document.getElementById("riskResult");
+        if (riskResult) {
+          riskResult.innerHTML = "⚠️ Please select a building type.";
+          riskResult.style.color = "orange";
+        }
+        return;
       }
 
-      if (importance === "critical") {
-        advice += "<br><br><strong>Critical Infrastructure:</strong><br>";
-        advice += "• Use base isolation<br>";
-        advice += "• Follow IS 1893 & IS 13920<br>";
-        advice += "• Ensure post-earthquake operation";
+      // Building type name for display
+      let buildingTypeName = "";
+      switch(buildingType) {
+        case "URM": buildingTypeName = "Unreinforced Masonry (URM) / Wood"; break;
+        case "RC": buildingTypeName = "RC Frame / Shear Wall / Steel"; break;
+        default: buildingTypeName = "Unknown";
       }
 
-      const riskResult = document.getElementById("riskResult");
-      if (riskResult) {
-        riskResult.innerHTML = `
-          <div style="padding:10px; border-radius:8px; border-left:5px solid ${color}; background:#f9f9f9;">
-            <strong style="color:${color};">Risk Level: ${risk}</strong><br>
-            Score: ${score}${faultWarning}<br><br>
-            ${advice}
-          </div>
-        `;
-      }
+      // Set color based on recommendation type
+      let color = "#2ecc71"; // default green for Tier 1
+      if (recommendationType === "tier3") color = "#e74c3c";
+      else if (recommendationType === "none") color = "#f39c12";
+
+      // Display result
+      // Display result with clean styling
+const riskResult = document.getElementById("riskResult");
+if (riskResult) {
+  riskResult.innerHTML = `
+    <div style="background: #f8fafc; border-radius: 12px; padding: 14px; border-left: 4px solid ${color}; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+        <span style="color: #5a6e7c; font-weight: 500;">📍 Location PGA</span>
+        <span style="color: #1a2a3a; font-weight: 600; font-family: monospace;">${pga.toFixed(4)} g</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+        <span style="color: #5a6e7c; font-weight: 500;">🏗️ Building Type</span>
+        <span style="color: #1a2a3a; font-weight: 600;">${buildingTypeName}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+        <span style="color: #5a6e7c; font-weight: 500;">📏 Stories</span>
+        <span style="color: #1a2a3a; font-weight: 600;">${stories}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+        <span style="color: #5a6e7c; font-weight: 500;">🌊 Seismicity</span>
+        <span style="color: #1a2a3a; font-weight: 600;">${seismicityDisplay}</span>
+      </div>
+      <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0; text-align: center;">
+        <strong style="color: ${color}; font-size: 0.9rem;">${recommendation}</strong>
+      </div>
+    </div>
+  `;
+}
     });
   }
 
@@ -1418,12 +1454,13 @@ function handleLegendVisibility() {
       });
     }
   }
- function fixLayerOrder() {
-  if (hazardLayer) hazardLayer.bringToFront();
-  if (countryBoundaryLayer) countryBoundaryLayer.bringToFront();
-  if (faultLayer) faultLayer.bringToFront();
-  if (currentMarker) currentMarker.bringToFront();
-}
+  
+  function fixLayerOrder() {
+    if (hazardLayer) hazardLayer.bringToFront();
+    if (countryBoundaryLayer) countryBoundaryLayer.bringToFront();
+    if (faultLayer) faultLayer.bringToFront();
+    if (currentMarker) currentMarker.setZIndexOffset(1000);
+  }
 
   async function init() {
     console.log("Initializing Seismic Hazard Map with local tiles...");

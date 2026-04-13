@@ -94,55 +94,62 @@
             </div>
 
             <details class="info-card modern-attribution">
-  <summary>📚 Data Sources & Attribution</summary>
+              <summary>📚 Data Sources & Attribution</summary>
 
-  <div class="attribution-grid">
+              <div class="attribution-grid">
+                <div class="attr-card">
+                  <div class="attr-title">🌐 Seismic Hazard</div>
+                  <div class="attr-text">
+                    GEM Foundation (v2023.1)<br />
+                    <a
+                      href="https://doi.org/10.5281/zenodo.8409647"
+                      target="_blank"
+                    >
+                      DOI Link
+                    </a>
+                  </div>
+                </div>
 
-    <div class="attr-card">
-      <div class="attr-title">🌐 Seismic Hazard</div>
-      <div class="attr-text">
-        GEM Foundation (v2023.1)<br />
-        <a href="https://doi.org/10.5281/zenodo.8409647" target="_blank">
-          DOI Link
-        </a>
-      </div>
-    </div>
+                <div class="attr-card">
+                  <div class="attr-title">⚡ Fault Lines</div>
+                  <div class="attr-text">
+                    GEM Global Active Faults<br />
+                    <a
+                      href="https://github.com/GEMScienceTools/gem-global-active-faults"
+                      target="_blank"
+                    >
+                      GitHub Source
+                    </a>
+                  </div>
+                </div>
 
-    <div class="attr-card">
-      <div class="attr-title">⚡ Fault Lines</div>
-      <div class="attr-text">
-        GEM Global Active Faults<br />
-        <a href="https://github.com/GEMScienceTools/gem-global-active-faults" target="_blank">
-          GitHub Source
-        </a>
-      </div>
-    </div>
+                <div class="attr-card">
+                  <div class="attr-title">🌍 Boundaries</div>
+                  <div class="attr-text">
+                    GeoJSON Countries Dataset<br />
+                    <a
+                      href="https://github.com/datasets/geo-countries"
+                      target="_blank"
+                    >
+                      Dataset Repo
+                    </a>
+                  </div>
+                </div>
 
-    <div class="attr-card">
-      <div class="attr-title">🌍 Boundaries</div>
-      <div class="attr-text">
-        GeoJSON Countries Dataset<br />
-        <a href="https://github.com/datasets/geo-countries" target="_blank">
-          Dataset Repo
-        </a>
-      </div>
-    </div>
+                <div class="attr-card">
+                  <div class="attr-title">🗺 Maps & Geocoding</div>
+                  <div class="attr-text">
+                    OpenStreetMap, CartoDB, Esri<br />
+                    Nominatim API
+                  </div>
+                </div>
+              </div>
 
-    <div class="attr-card">
-      <div class="attr-title">🗺 Maps & Geocoding</div>
-      <div class="attr-text">
-        OpenStreetMap, CartoDB, Esri<br />
-        Nominatim API
-      </div>
-    </div>
-
-  </div>
-
-  <div class="attr-footer">
-    ⚠️ For research use only. Not for detailed engineering decisions.
-  </div>
-
-</details>
+              <div class="attr-footer">
+                ⚠️ For research use only. Not for detailed engineering
+                decisions.
+              </div>
+            </details>
 
             <div class="info-card citation">
               <h3>Recommended Citation</h3>
@@ -158,7 +165,6 @@
         <!-- Map Container -->
         <div class="map-wrapper">
           <div id="map"></div>
-          
 
           <!-- Risk Analysis Panel -->
           <div class="risk-panel-floating collapsed" id="riskPanelFloating">
@@ -178,22 +184,20 @@
                 <span id="riskFault">--</span>
               </div>
 
-              <label>Building Importance</label>
-              <select id="importanceLevel">
-                <option value="normal">Normal</option>
-                <option value="important">Important</option>
-                <option value="critical">Critical (World Bank)</option>
+              <label>🏗️ Building Type</label>
+              <select id="buildingType" required>
+                <option value="" disabled selected>Select Building Type</option>
+                <option value="URM">Unreinforced Masonry / Wood</option>
+                <option value="RC">RC Frame / Shear Wall / Steel</option>
               </select>
 
-              <label>Building Height (floors)</label>
-              <input type="number" id="buildingHeight" placeholder="e.g. 6" />
-
-              <label>Soil Type</label>
-              <select id="soilType">
-                <option value="rock">Rock</option>
-                <option value="medium">Medium Soil</option>
-                <option value="soft">Soft Soil</option>
-              </select>
+              <label>📏 Number of Stories</label>
+              <input
+                type="number"
+                id="buildingStories"
+                placeholder="e.g., 6"
+                min="1"
+              />
 
               <button id="analyzeBtn" class="analyze-btn">Analyze Risk</button>
               <div id="riskResult"></div>
@@ -231,29 +235,29 @@
                 </div>
               </div>
               <div class="layer-group">
-  <div class="layer-group-title">Overlays</div>
+                <div class="layer-group-title">Overlays</div>
 
-  <div class="layer-option">
-    <label>
-      <input type="checkbox" id="faultLinesToggle" />
-      <span>Fault Lines</span>
-    </label>
-  </div>
+                <div class="layer-option">
+                  <label>
+                    <input type="checkbox" id="faultLinesToggle" />
+                    <span>Fault Lines</span>
+                  </label>
+                </div>
 
-  <div class="layer-option">
-    <label>
-      <input type="checkbox" id="countryBoundaryToggle" checked />
-      <span>Country Boundaries</span>
-    </label>
-  </div>
+                <div class="layer-option">
+                  <label>
+                    <input type="checkbox" id="countryBoundaryToggle" checked />
+                    <span>Country Boundaries</span>
+                  </label>
+                </div>
 
-  <div class="layer-option">
-    <label>
-      <input type="checkbox" id="hazardLayerToggle" checked />
-      <span>Seismic Hazard</span>
-    </label>
-  </div>
-</div>
+                <div class="layer-option">
+                  <label>
+                    <input type="checkbox" id="hazardLayerToggle" checked />
+                    <span>Seismic Hazard</span>
+                  </label>
+                </div>
+              </div>
               <div class="layer-opacity" id="opacityControl">
                 <span>Hazard Opacity</span>
                 <input
