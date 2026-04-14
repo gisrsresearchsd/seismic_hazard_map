@@ -152,6 +152,31 @@
     }
   }
 
+  function showClickAnimation(lat, lng) {
+    const circle = L.circle([lat, lng], {
+      radius: 20000,
+      color: "#005187",
+      fillColor: "#005187",
+      fillOpacity: 0.3,
+      weight: 1,
+    }).addTo(map);
+
+    let currentRadius = 20000;
+
+    const interval = setInterval(() => {
+      currentRadius += 20000;
+      circle.setRadius(currentRadius);
+      circle.setStyle({
+        fillOpacity: Math.max(0, 0.3 - currentRadius / 200000),
+      });
+
+      if (currentRadius > 120000) {
+        clearInterval(interval);
+        map.removeLayer(circle);
+      }
+    }, 60);
+  }
+
   // ==================== FAULT DISTANCE CALCULATION ====================
   function calculateDistanceToNearestFault(lat, lng) {
     if (
@@ -256,17 +281,18 @@
     ];
 
     window.faultDistanceLine = L.polyline(latlngs, {
-      color: "#ff3b2f",
-      weight: 2,
-      dashArray: "5, 5",
-      opacity: 0.7,
+      color: "#005187",
+      weight: 3,
+      dashArray: "8, 6",
+      opacity: 0.8,
+      className: "animated-line",
     }).addTo(map);
 
     window.nearestFaultMarker = L.circleMarker(
       [nearestPoint[1], nearestPoint[0]],
       {
         radius: 6,
-        color: "#ff3b2f",
+        color: "#005187",
         fillColor: "#ff0000",
         fillOpacity: 0.8,
       },
@@ -552,7 +578,7 @@
         });
       },
     }).addTo(map);
-    fixLayerOrder();    
+    fixLayerOrder();
   }
 
   function removeCountryBoundaries() {
@@ -588,7 +614,7 @@
       faultLayer = L.geoJSON(geojsonData, {
         renderer: L.canvas(),
         style: {
-          color: "#ff3b2f",
+          color: "#005187",
           weight: 2,
           opacity: 0.85,
         },
@@ -672,13 +698,13 @@
     }
   }
 
-function handleLegendVisibility() {
-  const legend = document.getElementById("legendSection");
-  if (!legend) return;
+  function handleLegendVisibility() {
+    const legend = document.getElementById("legendSection");
+    if (!legend) return;
 
-  // Show legend ONLY if hazard is ON
-  legend.style.display = isHazardVisible ? "block" : "none";
-}
+    // Show legend ONLY if hazard is ON
+    legend.style.display = isHazardVisible ? "block" : "none";
+  }
 
   // ==================== SEARCH & LOCATION ====================
   async function searchNominatim(query) {
@@ -742,13 +768,15 @@ function handleLegendVisibility() {
 
     currentMarker = L.marker([lat, lng], {
       icon: L.divIcon({
-        className: "custom-marker",
+        className: "custom-marker pulse-marker",
         iconSize: [12, 12],
         iconAnchor: [6, 6],
       }),
     }).addTo(map);
 
+    updateStatus("Fetching hazard data...", false);
     const hazard = await getHazardFromRaster(lat, lng);
+    updateStatus("Ready", true);
     let hazardText = "--";
     let hazardLevel = "--";
 
@@ -829,7 +857,6 @@ function handleLegendVisibility() {
     }
     fixLayerOrder();
   }
-  
 
   // ==================== MAP INITIALIZATION ====================
   function addCustomZoomControl() {
@@ -1261,6 +1288,7 @@ function handleLegendVisibility() {
     map.on("zoomend", handleLegendVisibility);
     map.on("click", async (e) => {
       const { lat, lng } = e.latlng;
+      showClickAnimation(lat, lng);
       await selectLocation("Selected Location", lat, lng, "");
     });
 
@@ -1310,7 +1338,7 @@ function handleLegendVisibility() {
       // Get PGA value from the stat display
       const pgaElement = document.getElementById("statPGA");
       let pga = parseFloat(pgaElement ? pgaElement.textContent : "NaN");
-      
+
       if (isNaN(pga)) {
         const riskResult = document.getElementById("riskResult");
         if (riskResult) {
@@ -1322,12 +1350,13 @@ function handleLegendVisibility() {
 
       // Get building parameters
       const buildingType = document.getElementById("buildingType").value;
-      const stories = parseInt(document.getElementById("buildingStories").value) || 1;
+      const stories =
+        parseInt(document.getElementById("buildingStories").value) || 1;
 
       // Helper to get seismicity category
       let seismicityCategory = "";
       let seismicityDisplay = "";
-      
+
       if (pga < 0.01) {
         seismicityCategory = "null";
         seismicityDisplay = "Null (less than 0.01g)";
@@ -1394,10 +1423,15 @@ function handleLegendVisibility() {
 
       // Building type name for display
       let buildingTypeName = "";
-      switch(buildingType) {
-        case "URM": buildingTypeName = "Unreinforced Masonry (URM) / Wood"; break;
-        case "RC": buildingTypeName = "RC Frame / Shear Wall / Steel"; break;
-        default: buildingTypeName = "Unknown";
+      switch (buildingType) {
+        case "URM":
+          buildingTypeName = "Unreinforced Masonry (URM) / Wood";
+          break;
+        case "RC":
+          buildingTypeName = "RC Frame / Shear Wall / Steel";
+          break;
+        default:
+          buildingTypeName = "Unknown";
       }
 
       // Set color based on recommendation type
@@ -1407,9 +1441,9 @@ function handleLegendVisibility() {
 
       // Display result
       // Display result with clean styling
-const riskResult = document.getElementById("riskResult");
-if (riskResult) {
-  riskResult.innerHTML = `
+      const riskResult = document.getElementById("riskResult");
+      if (riskResult) {
+        riskResult.innerHTML = `
     <div style="background: #f8fafc; border-radius: 12px; padding: 14px; border-left: 4px solid ${color}; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
       <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
         <span style="color: #5a6e7c; font-weight: 500;">📍 Location PGA</span>
@@ -1432,7 +1466,7 @@ if (riskResult) {
       </div>
     </div>
   `;
-}
+      }
     });
   }
 
@@ -1454,7 +1488,7 @@ if (riskResult) {
       });
     }
   }
-  
+
   function fixLayerOrder() {
     if (hazardLayer) hazardLayer.bringToFront();
     if (countryBoundaryLayer) countryBoundaryLayer.bringToFront();
