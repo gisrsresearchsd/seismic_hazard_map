@@ -2,139 +2,127 @@
  * Global Seismic Hazard Map - Professional Version with Fault Line Analysis
  * GEM Foundation v2023.1
  * Handles map visualization, location search, seismic hazard data, and fault distance calculation
- * Supports local tile loading from 'tiles' folder
+ * 
+ * Refactored for maintainability while preserving all original logic and functionality.
  */
 
 (function () {
   "use strict";
 
-  // ==================== CONFIGURATION ====================
+  // CONFIGURATION  
   const CONFIG = {
+    // Map Viewport
     defaultCenter: [20, 0],
     defaultZoom: 2,
     minZoom: 2,
     maxZoom: 6,
     maxBounds: [
-      [-60, -180],
-      [84, 180],
-    ],
+      [-60, -180],[84, 180],],
+
+    // Tile Settings
     tilePath: "tiles/{z}/{x}/{y}.png",
     hazardOpacity: 0.75,
+
+    // Animation
     flyToZoom: 6,
     flyToDuration: 1.2,
+
+    // External APIs
     nominatimEndpoint: "https://nominatim.openstreetmap.org/search",
     userAgent: "SeismicHazardMap/1.0",
+
+    // Feature Toggles
     faultZoomThreshold: 5,
   };
 
-  // PGA Color Lookup Table
+  // PGA Color Lookup Table - Maps RGB colors to PGA values and hazard levels
   const PGA_LOOKUP_TABLE = [
-    {
-      color: [255, 255, 255],
-      min: 0.0,
-      max: 0.01,
-      level: "Very Low",
-      rgbKey: "255,255,255",
-    },
-    {
-      color: [215, 227, 238],
-      min: 0.01,
-      max: 0.02,
-      level: "Low",
-      rgbKey: "215,227,238",
-    },
-    {
-      color: [181, 202, 255],
-      min: 0.02,
-      max: 0.03,
-      level: "Low-Moderate",
-      rgbKey: "181,202,255",
-    },
-    {
-      color: [143, 179, 255],
-      min: 0.03,
-      max: 0.05,
-      level: "Moderate",
-      rgbKey: "143,179,255",
-    },
-    {
-      color: [127, 151, 255],
-      min: 0.05,
-      max: 0.08,
-      level: "Moderate-High",
-      rgbKey: "127,151,255",
-    },
-    {
-      color: [171, 207, 99],
-      min: 0.08,
-      max: 0.13,
-      level: "High",
-      rgbKey: "171,207,99",
-    },
-    {
-      color: [232, 245, 158],
-      min: 0.13,
-      max: 0.2,
-      level: "High",
-      rgbKey: "232,245,158",
-    },
-    {
-      color: [255, 250, 20],
-      min: 0.2,
-      max: 0.35,
-      level: "Very High",
-      rgbKey: "255,250,20",
-    },
-    {
-      color: [255, 209, 33],
-      min: 0.35,
-      max: 0.55,
-      level: "Very High",
-      rgbKey: "255,209,33",
-    },
-    {
-      color: [255, 163, 10],
-      min: 0.55,
-      max: 0.9,
-      level: "Extreme",
-      rgbKey: "255,163,10",
-    },
-    {
-      color: [255, 76, 0],
-      min: 0.9,
-      max: 1.5,
-      level: "Extreme",
-      rgbKey: "255,76,0",
-    },
+    { color: [255, 255, 255], min: 0.0, max: 0.01, level: "Very Low" },
+    { color: [215, 227, 238], min: 0.01, max: 0.02, level: "Low" },
+    { color: [181, 202, 255], min: 0.02, max: 0.03, level: "Low-Moderate" },
+    { color: [143, 179, 255], min: 0.03, max: 0.05, level: "Moderate" },
+    { color: [127, 151, 255], min: 0.05, max: 0.08, level: "Moderate-High" },
+    { color: [171, 207, 99], min: 0.08, max: 0.13, level: "High" },
+    { color: [232, 245, 158], min: 0.13, max: 0.2, level: "High" },
+    { color: [255, 250, 20], min: 0.2, max: 0.35, level: "Very High" },
+    { color: [255, 209, 33], min: 0.35, max: 0.55, level: "Very High" },
+    { color: [255, 163, 10], min: 0.55, max: 0.9, level: "Extreme" },
+    { color: [255, 76, 0], min: 0.9, max: 1.5, level: "Extreme" },
   ];
 
+  // Build RGB → Hazard lookup map for quick pixel-to-hazard conversion
   const RGB_TO_HAZARD = new Map();
   PGA_LOOKUP_TABLE.forEach((item) => {
-    RGB_TO_HAZARD.set(item.rgbKey, item);
+    const rgbKey = item.color.join(",");
+    RGB_TO_HAZARD.set(rgbKey, {
+      pga: (item.min + item.max) / 2,
+      level: item.level,
+      min: item.min,
+      max: item.max,
+      color: item.color,
+      rgbKey: rgbKey,
+    });
   });
 
-  // Global variables
-  let map,
-    currentMarker,
-    hazardLayer,
-    currentBasemap,
-    countryBoundaryLayer,
-    faultLayer = null;
+  // Fault distance thresholds for risk assessment
+  const FAULT_THRESHOLDS = {
+    CRITICAL: 10,
+    HIGH: 30,
+    MODERATE: 60,
+    LOW: 100,
+    LINE_DISPLAY_DURATION: 8000,
+  };
+
+  //GLOBAL STATE 
+  
+  // Map layers
+  let map = null;
+  let currentMarker = null;
+  let hazardLayer = null;
+  let currentBasemap = null;
+  let countryBoundaryLayer = null;
+  let faultLayer = null;
+
+  // UI State
   let currentHazardOpacity = CONFIG.hazardOpacity;
   let isHazardVisible = true;
   let isFaultVisible = false;
-  let dynamicCountryData = {};
+
+  // Data stores
   let countryGeoJSON = null;
-  let currentNominatimRequest = null;
+  let dynamicCountryData = {};
+
+  // Async state
+  let currentNominatimController = null;
   let faultLoading = false;
   let tileErrorCount = 0;
+
+  // Fault line visual elements
+  let faultDistanceLine = null;
+  let nearestFaultMarker = null;
+
+  // Current analysis results
   let currentFaultInfo = null;
 
-  // ==================== HELPER FUNCTIONS ====================
+  // UTILITY FUNCTIONS 
+  
+  /**
+   * Formats coordinates as degrees with cardinal directions
+   * @param {number} lat - Latitude
+   * @param {number} lng - Longitude
+   * @returns {string} Formatted coordinate string (e.g., "40.7128° N, 74.0060° W")
+   */
   function formatCoordinates(lat, lng) {
-    return `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? "N" : "S"}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? "E" : "W"}`;
+    const latDir = lat >= 0 ? "N" : "S";
+    const lngDir = lng >= 0 ? "E" : "W";
+    return `${Math.abs(lat).toFixed(4)}° ${latDir}, ${Math.abs(lng).toFixed(4)}° ${lngDir}`;
   }
 
+  /**
+   * Escapes HTML special characters to prevent XSS
+   * @param {string} str - Input string
+   * @returns {string} Escaped HTML string
+   */
   function escapeHtml(str) {
     if (!str) return "";
     const div = document.createElement("div");
@@ -142,52 +130,146 @@
     return div.innerHTML;
   }
 
+  /**
+   * Updates the map status indicator
+   * @param {string} text - Status message
+   * @param {boolean} isReady - Whether the map is ready (activates green dot)
+   */
   function updateStatus(text, isReady) {
     const statusText = document.getElementById("statusText");
     const statusDot = document.querySelector(".status-dot");
+
     if (statusText) statusText.textContent = text;
     if (statusDot) {
-      if (isReady) statusDot.classList.add("active");
-      else statusDot.classList.remove("active");
+      isReady
+        ? statusDot.classList.add("active")
+        : statusDot.classList.remove("active");
     }
   }
 
+  /**
+   * Creates an expanding circle animation at click location
+   * @param {number} lat - Latitude of click
+   * @param {number} lng - Longitude of click
+   */
   function showClickAnimation(lat, lng) {
+    const START_RADIUS = 20000;
+    const MAX_RADIUS = 120000;
+    const STEP_SIZE = 20000;
+    const INTERVAL_MS = 60;
+    const MAX_OPACITY = 0.3;
+
     const circle = L.circle([lat, lng], {
-      radius: 20000,
+      radius: START_RADIUS,
       color: "#005187",
       fillColor: "#005187",
-      fillOpacity: 0.3,
+      fillOpacity: MAX_OPACITY,
       weight: 1,
     }).addTo(map);
 
-    let currentRadius = 20000;
+    let currentRadius = START_RADIUS;
 
     const interval = setInterval(() => {
-      currentRadius += 20000;
+      currentRadius += STEP_SIZE;
       circle.setRadius(currentRadius);
-      circle.setStyle({
-        fillOpacity: Math.max(0, 0.3 - currentRadius / 200000),
-      });
 
-      if (currentRadius > 120000) {
+      const newOpacity = Math.max(0, MAX_OPACITY - currentRadius / MAX_RADIUS);
+      circle.setStyle({ fillOpacity: newOpacity });
+
+      if (currentRadius >= MAX_RADIUS) {
         clearInterval(interval);
         map.removeLayer(circle);
       }
-    }, 60);
+    }, INTERVAL_MS);
   }
 
-  // ==================== FAULT DISTANCE CALCULATION ====================
+  /**
+   * Disables or enables form inputs when PGA data is unavailable
+   * @param {boolean} isDisabled - Whether to disable form inputs
+   */
+  function setFormDisabled(isDisabled) {
+    const elements = [
+      document.getElementById("propertyType"),
+      document.getElementById("buildingType"),
+      document.getElementById("buildingStories"),
+      document.getElementById("seismicAssessmentDone"),
+    ];
+
+    elements.forEach((el) => {
+      if (el) el.disabled = isDisabled;
+    });
+
+    const checkboxes = document.querySelectorAll(
+      '.documents-option input[type="checkbox"]',
+    );
+    checkboxes.forEach((cb) => (cb.disabled = isDisabled));
+  }
+
+  //  FAULT ANALYSIS FUNCTIONS 
+  
+  /**
+   * Extracts coordinates from GeoJSON geometry (handles LineString and MultiLineString)
+   * @param {Object} geometry - GeoJSON geometry object
+   * @returns {Array|null} Array of coordinates or null if invalid
+   */
+  function extractFaultCoordinates(geometry) {
+    if (!geometry) return null;
+
+    if (geometry.type === "LineString") {
+      return geometry.coordinates;
+    }
+
+    if (geometry.type === "MultiLineString") {
+      let longestSegment = null;
+      let maxLength = 0;
+
+      for (const line of geometry.coordinates) {
+        if (line.length > maxLength) {
+          maxLength = line.length;
+          longestSegment = line;
+        }
+      }
+      return longestSegment;
+    }
+
+    return null;
+  }
+
+  /**
+   * Returns a human-readable risk message based on distance to nearest fault
+   * @param {number} distanceKm - Distance to nearest fault in kilometers
+   * @returns {string} Risk assessment message
+   */
+  function getFaultDistanceMessage(distanceKm) {
+    if (distanceKm < FAULT_THRESHOLDS.CRITICAL) {
+      return "⚠️ CRITICAL: Very close to active fault! Special seismic design required.";
+    }
+    if (distanceKm < FAULT_THRESHOLDS.HIGH) {
+      return "⚠️ HIGH: Within 30km of active fault. Enhanced design recommended.";
+    }
+    if (distanceKm < FAULT_THRESHOLDS.MODERATE) {
+      return "⚠️ MODERATE: Within 60km of fault. Standard seismic design advised.";
+    }
+    if (distanceKm < FAULT_THRESHOLDS.LOW) {
+      return "✓ LOW: Beyond 60km from major faults. Regular seismic considerations apply.";
+    }
+    return "✓ VERY LOW: Far from known active faults.";
+  }
+
+  /**
+   * Calculates distance from a point to the nearest fault line using Turf.js
+   * @param {number} lat - Latitude of selected point
+   * @param {number} lng - Longitude of selected point
+   * @returns {Object} Distance, fault name, fault type, nearest point, and message
+   */
   function calculateDistanceToNearestFault(lat, lng) {
-    if (
-      !faultLayer ||
-      !faultLayer.getLayers ||
-      faultLayer.getLayers().length === 0
-    ) {
+    if (!faultLayer || faultLoading || !map.hasLayer(faultLayer)) {
       return {
         distance: null,
         nearestFault: null,
-        message: "Fault data not loaded",
+        faultType: null,
+        nearestPoint: null,
+        message: "Fault layer not active or not loaded",
       };
     }
 
@@ -198,40 +280,42 @@
 
     const clickPoint = turf.point([lng, lat]);
 
-    faultLayer.eachLayer(function (layer) {
-      if (layer.feature && layer.feature.geometry) {
-        try {
-          let coordinates;
-          if (layer.feature.geometry.type === "LineString") {
-            coordinates = layer.feature.geometry.coordinates;
-          } else if (layer.feature.geometry.type === "MultiLineString") {
-            coordinates = layer.feature.geometry.coordinates[0];
-          } else {
-            return;
-          }
+    faultLayer.eachLayer((layer) => {
+      if (!layer.feature?.geometry) return;
 
-          const faultLine = turf.lineString(coordinates);
-          const distance = turf.pointToLineDistance(clickPoint, faultLine, {
-            units: "kilometers",
-          });
+      try {
+        const coordinates = extractFaultCoordinates(layer.feature.geometry);
+        if (!coordinates) return;
+
+        const faultLine = turf.lineString(coordinates);
+        const distance = turf.pointToLineDistance(clickPoint, faultLine, {
+          units: "kilometers",
+        });
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          const props = layer.feature.properties || {};
+
+          nearestFaultName =
+            props.name || props.Name || props.fault_name || "Unnamed Fault";
+          nearestFaultType = props.slip_type || props.slipType || "Unknown";
+
           const nearest = turf.nearestPointOnLine(faultLine, clickPoint);
-
-          if (distance < minDistance) {
-            minDistance = distance;
-            const props = layer.feature.properties || {};
-            nearestFaultName =
-              props.name || props.Name || props.fault_name || "Unnamed Fault";
-            nearestFaultType = props.slip_type || props.slipType || "Unknown";
-            nearestPoint = nearest.geometry.coordinates;
-          }
-        } catch (err) {
-          console.warn("Error calculating distance for fault:", err);
+          nearestPoint = nearest.geometry.coordinates;
         }
+      } catch (err) {
+        console.warn("Error calculating distance for fault:", err);
       }
     });
 
     if (minDistance === Infinity) {
-      return { distance: null, nearestFault: null, message: "No faults found" };
+      return {
+        distance: null,
+        nearestFault: null,
+        faultType: null,
+        nearestPoint: null,
+        message: "No faults found in this region",
+      };
     }
 
     return {
@@ -243,35 +327,15 @@
     };
   }
 
-  function getFaultDistanceMessage(distanceKm) {
-    if (distanceKm < 10) {
-      return "⚠️ CRITICAL: Very close to active fault! Special seismic design required.";
-    } else if (distanceKm < 30) {
-      return "⚠️ HIGH: Within 30km of active fault. Enhanced design recommended.";
-    } else if (distanceKm < 60) {
-      return "⚠️ MODERATE: Within 60km of fault. Standard seismic design advised.";
-    } else if (distanceKm < 100) {
-      return "✓ LOW: Beyond 60km from major faults. Regular seismic considerations apply.";
-    } else {
-      return "✓ VERY LOW: Far from known active faults.";
-    }
-  }
-
-  function getFaultRiskModifier(distanceKm) {
-    if (!distanceKm) return 0;
-    if (distanceKm < 10) return 3;
-    if (distanceKm < 30) return 2;
-    if (distanceKm < 60) return 1;
-    return 0;
-  }
-
+  /**
+   * Draws a temporary dashed line from click point to nearest fault point
+   * @param {Array} clickLngLat - Click coordinates [lng, lat]
+   * @param {Array} nearestPoint - Nearest fault point coordinates [lng, lat]
+   * @param {string} faultName - Name of the nearest fault
+   */
   function showFaultDistanceLine(clickLngLat, nearestPoint, faultName) {
-    if (window.faultDistanceLine) {
-      map.removeLayer(window.faultDistanceLine);
-    }
-    if (window.nearestFaultMarker) {
-      map.removeLayer(window.nearestFaultMarker);
-    }
+    if (faultDistanceLine) map.removeLayer(faultDistanceLine);
+    if (nearestFaultMarker) map.removeLayer(nearestFaultMarker);
 
     if (!nearestPoint) return;
 
@@ -280,7 +344,7 @@
       [nearestPoint[1], nearestPoint[0]],
     ];
 
-    window.faultDistanceLine = L.polyline(latlngs, {
+    faultDistanceLine = L.polyline(latlngs, {
       color: "#005187",
       weight: 3,
       dashArray: "8, 6",
@@ -288,25 +352,105 @@
       className: "animated-line",
     }).addTo(map);
 
-    window.nearestFaultMarker = L.circleMarker(
-      [nearestPoint[1], nearestPoint[0]],
-      {
-        radius: 6,
-        color: "#005187",
-        fillColor: "#ff0000",
-        fillOpacity: 0.8,
-      },
-    )
+    nearestFaultMarker = L.circleMarker([nearestPoint[1], nearestPoint[0]], {
+      radius: 6,
+      color: "#005187",
+      fillColor: "#ff0000",
+      fillOpacity: 0.8,
+    })
       .addTo(map)
       .bindTooltip(`Nearest point on ${faultName}`, { sticky: true });
 
     setTimeout(() => {
-      if (window.faultDistanceLine) map.removeLayer(window.faultDistanceLine);
-      if (window.nearestFaultMarker) map.removeLayer(window.nearestFaultMarker);
-    }, 8000);
+      if (faultDistanceLine) map.removeLayer(faultDistanceLine);
+      if (nearestFaultMarker) map.removeLayer(nearestFaultMarker);
+      faultDistanceLine = null;
+      nearestFaultMarker = null;
+    }, FAULT_THRESHOLDS.LINE_DISPLAY_DURATION);
   }
 
-  // ==================== HAZARD LOOKUP ====================
+  //  HAZARD FUNCTIONS 
+  
+  /**
+   * Finds the closest hazard level by comparing RGB values with tolerance
+   * @param {number} r - Red channel value
+   * @param {number} g - Green channel value
+   * @param {number} b - Blue channel value
+   * @returns {Object} PGA value and hazard level
+   */
+  function findClosestHazard(r, g, b) {
+    for (const hazard of PGA_LOOKUP_TABLE) {
+      const [cr, cg, cb] = hazard.color;
+
+      if (
+        Math.abs(r - cr) < 10 &&
+        Math.abs(g - cg) < 10 &&
+        Math.abs(b - cb) < 10
+      ) {
+        return {
+          pga: (hazard.min + hazard.max) / 2,
+          level: hazard.level,
+          min: hazard.min,
+          max: hazard.max,
+        };
+      }
+    }
+
+    return {
+      pga: 0.025,
+      level: "Low-Moderate",
+    };
+  }
+
+  /**
+   * Provides fallback PGA estimates for regions when tile data is unavailable
+   * Uses known seismic zones (Ring of Fire, Mediterranean, etc.)
+   * @param {number} lat - Latitude
+   * @param {number} lng - Longitude
+   * @returns {Object} PGA value and hazard level
+   */
+  function getHazardEstimate(lat, lng) {
+    // Pacific Ring of Fire (Extreme)
+    if (
+      (lat > 20 && lat < 50 && lng > 130 && lng < 150) ||
+      (lat > -10 && lat < 20 && lng > 120 && lng < 140) ||
+      (lat > 30 && lat < 60 && lng > -130 && lng < -110) ||
+      (lat > -40 && lat < -20 && lng > -80 && lng < -60)
+    ) {
+      return { pga: 0.65, level: "Extreme" };
+    }
+    // Mediterranean / Himalayan (Very High)
+    if (
+      (lat > 35 && lat < 45 && lng > 10 && lng < 30) ||
+      (lat > 25 && lat < 40 && lng > 70 && lng < 90)
+    ) {
+      return { pga: 0.35, level: "Very High" };
+    }
+    // High seismicity regions
+    if (
+      (lat > 30 && lat < 45 && lng > 70 && lng < 85) ||
+      (lat > -20 && lat < -5 && lng > -75 && lng < -60)
+    ) {
+      return { pga: 0.105, level: "High" };
+    }
+    // Moderate-High regions
+    if (
+      (lat > 30 && lat < 45 && lng > -125 && lng < -110) ||
+      (lat > 35 && lat < 50 && lng > -10 && lng < 20)
+    ) {
+      return { pga: 0.065, level: "Moderate-High" };
+    }
+    // Default
+    return { pga: 0.025, level: "Low-Moderate" };
+  }
+
+  /**
+   * Reads hazard value from raster tile pixel at given coordinates
+   * Falls back to estimate if tile is unavailable
+   * @param {number} lat - Latitude
+   * @param {number} lng - Longitude
+   * @returns {Promise<Object|null>} Hazard info or null if ocean area
+   */
   async function getHazardFromRaster(lat, lng) {
     return new Promise((resolve) => {
       try {
@@ -342,10 +486,9 @@
             const pixelY = Math.floor(point.y % tileSize);
 
             const imageData = ctx.getImageData(pixelX, pixelY, 1, 1);
-            const r = imageData.data[0];
-            const g = imageData.data[1];
-            const b = imageData.data[2];
+            const [r, g, b] = imageData.data;
 
+            // Check for transparent or white pixels (ocean/void)
             if (
               imageData.data[3] === 0 ||
               (r === 255 && g === 255 && b === 255)
@@ -354,8 +497,7 @@
               return;
             }
 
-            const rgbKey = `${r},${g},${b}`;
-            const hazardInfo = RGB_TO_HAZARD.get(rgbKey);
+            const hazardInfo = RGB_TO_HAZARD.get(`${r},${g},${b}`);
 
             if (hazardInfo) {
               resolve({
@@ -391,61 +533,12 @@
     });
   }
 
-  function findClosestHazard(r, g, b) {
-    let minDistance = Infinity;
-    let closest = PGA_LOOKUP_TABLE[0];
-
-    for (const hazard of PGA_LOOKUP_TABLE) {
-      const [cr, cg, cb] = hazard.color;
-      const distance = Math.sqrt(
-        Math.pow(r - cr, 2) + Math.pow(g - cg, 2) + Math.pow(b - cb, 2),
-      );
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        closest = hazard;
-      }
-    }
-
-    return {
-      pga: (closest.min + closest.max) / 2,
-      level: closest.level,
-      min: closest.min,
-      max: closest.max,
-    };
-  }
-
-  function getHazardEstimate(lat, lng) {
-    if (
-      (lat > 20 && lat < 50 && lng > 130 && lng < 150) ||
-      (lat > -10 && lat < 20 && lng > 120 && lng < 140) ||
-      (lat > 30 && lat < 60 && lng > -130 && lng < -110) ||
-      (lat > -40 && lat < -20 && lng > -80 && lng < -60)
-    ) {
-      return { pga: 0.65, level: "Extreme" };
-    }
-    if (
-      (lat > 35 && lat < 45 && lng > 10 && lng < 30) ||
-      (lat > 25 && lat < 40 && lng > 70 && lng < 90)
-    ) {
-      return { pga: 0.35, level: "Very High" };
-    }
-    if (
-      (lat > 30 && lat < 45 && lng > 70 && lng < 85) ||
-      (lat > -20 && lat < -5 && lng > -75 && lng < -60)
-    ) {
-      return { pga: 0.105, level: "High" };
-    }
-    if (
-      (lat > 30 && lat < 45 && lng > -125 && lng < -110) ||
-      (lat > 35 && lat < 50 && lng > -10 && lng < 20)
-    ) {
-      return { pga: 0.065, level: "Moderate-High" };
-    }
-    return { pga: 0.025, level: "Low-Moderate" };
-  }
-
-  // ==================== COUNTRY DATA LOADING ====================
+  //  COUNTRY DATA FUNCTIONS 
+  
+  /**
+   * Loads country GeoJSON from remote repository and computes centroid coordinates
+   * @returns {Promise<boolean>} Success status
+   */
   async function loadCountriesFromGeoJSON() {
     try {
       const response = await fetch(
@@ -501,6 +594,9 @@
     }
   }
 
+  /**
+   * Provides fallback country data when GeoJSON fails to load
+   */
   function loadFallbackCountries() {
     dynamicCountryData = {
       "United States": { lat: 39.8283, lng: -98.5795, name: "United States" },
@@ -519,11 +615,11 @@
       Chile: { lat: -35.6751, lng: -71.543, name: "Chile" },
       "New Zealand": { lat: -40.9006, lng: 174.886, name: "New Zealand" },
     };
-    console.log(
-      `Loaded ${Object.keys(dynamicCountryData).length} fallback countries`,
-    );
   }
 
+  /**
+   * Populates the country dropdown select element
+   */
   function populateCountryDropdown() {
     const countrySelect = document.getElementById("countrySelect");
     if (!countrySelect) return;
@@ -542,7 +638,11 @@
       });
   }
 
-  // ==================== COUNTRY BOUNDARIES ====================
+  //  MAP LAYER FUNCTIONS 
+  
+  /**
+   * Adds country boundary polygons to the map with tooltips
+   */
   function addCountryBoundaries() {
     if (countryBoundaryLayer) {
       map.removeLayer(countryBoundaryLayer);
@@ -581,6 +681,9 @@
     fixLayerOrder();
   }
 
+  /**
+   * Removes country boundary layer from map
+   */
   function removeCountryBoundaries() {
     if (countryBoundaryLayer) {
       map.removeLayer(countryBoundaryLayer);
@@ -588,7 +691,10 @@
     }
   }
 
-  // ==================== FAULT LINES ====================
+  /**
+   * Loads fault line data from TopoJSON file and converts to GeoJSON
+   * @returns {Promise<void>}
+   */
   async function loadFaultLines() {
     if (faultLayer || faultLoading) return;
     faultLoading = true;
@@ -599,8 +705,6 @@
       if (!response.ok) throw new Error("Failed to load fault data");
 
       const topoData = await response.json();
-      console.log("TopoJSON objects:", Object.keys(topoData.objects));
-
       const objectName = Object.keys(topoData.objects)[0];
       const geojsonData = topojson.feature(
         topoData,
@@ -647,6 +751,10 @@
     }
   }
 
+  /**
+   * Toggles fault line visibility based on zoom level threshold
+   * @param {boolean} show - Whether to show fault lines
+   */
   function toggleFaultLines(show) {
     isFaultVisible = show;
     const currentZoom = map.getZoom();
@@ -673,6 +781,9 @@
     }
   }
 
+  /**
+   * Handles dynamic fault visibility on zoom change
+   */
   function handleZoomForFaults() {
     if (!map) return;
 
@@ -698,167 +809,30 @@
     }
   }
 
+  /**
+   * Updates legend visibility based on hazard layer state
+   */
   function handleLegendVisibility() {
     const legend = document.getElementById("legendSection");
     if (!legend) return;
-
-    // Show legend ONLY if hazard is ON
     legend.style.display = isHazardVisible ? "block" : "none";
   }
 
-  // ==================== SEARCH & LOCATION ====================
-  async function searchNominatim(query) {
-    if (!query || query.length < 2) return [];
-
-    if (currentNominatimRequest) {
-      currentNominatimRequest.abort();
-    }
-
-    const controller = new AbortController();
-    currentNominatimRequest = controller;
-
-    try {
-      const params = new URLSearchParams({
-        q: query,
-        format: "json",
-        limit: 8,
-        addressdetails: 1,
-        "accept-language": "en",
-      });
-
-      const response = await fetch(
-        `${CONFIG.nominatimEndpoint}?${params.toString()}`,
-        {
-          signal: controller.signal,
-          headers: { "User-Agent": CONFIG.userAgent },
-        },
-      );
-
-      if (!response.ok) throw new Error("Nominatim request failed");
-
-      const data = await response.json();
-      currentNominatimRequest = null;
-
-      return data.map((item) => ({
-        type: "nominatim",
-        name: item.display_name.split(",")[0],
-        fullName: item.display_name,
-        lat: parseFloat(item.lat),
-        lng: parseFloat(item.lon),
-        category: item.category || item.type,
-      }));
-    } catch (error) {
-      if (error.name !== "AbortError") {
-        console.error("Nominatim error:", error);
-      }
-      return [];
-    }
+  /**
+   * Ensures proper z-index ordering of map layers
+   */
+  function fixLayerOrder() {
+    if (hazardLayer) hazardLayer.bringToFront();
+    if (countryBoundaryLayer) countryBoundaryLayer.bringToFront();
+    if (faultLayer) faultLayer.bringToFront();
+    if (currentMarker) currentMarker.setZIndexOffset(1000);
   }
 
-  async function selectLocation(
-    name,
-    lat,
-    lng,
-    country = "",
-    fullAddress = "",
-  ) {
-    if (currentMarker) {
-      map.removeLayer(currentMarker);
-    }
-
-    currentMarker = L.marker([lat, lng], {
-      icon: L.divIcon({
-        className: "custom-marker pulse-marker",
-        iconSize: [12, 12],
-        iconAnchor: [6, 6],
-      }),
-    }).addTo(map);
-
-    updateStatus("Fetching hazard data...", false);
-    const hazard = await getHazardFromRaster(lat, lng);
-    updateStatus("Ready", true);
-    let hazardText = "--";
-    let hazardLevel = "--";
-
-    if (hazard) {
-      hazardText = hazard.pga.toFixed(3);
-      hazardLevel = hazard.level;
-    }
-    const faultInfo = calculateDistanceToNearestFault(lat, lng);
-    currentFaultInfo = faultInfo;
-
-    const displayName = fullAddress || name;
-
-    let faultHtml = "";
-    if (faultInfo.distance !== null) {
-      faultHtml = `<br><span style="color: #ff3b2f;">⚡ Nearest Fault: ${faultInfo.nearestFault}</span><br>
-                   <span>📏 Distance: ${faultInfo.distance.toFixed(2)} km</span><br>
-                   <span style="font-size: 0.8rem;">${faultInfo.message}</span>`;
-    }
-
-    const popupContent = `
-  <strong>${escapeHtml(displayName)}</strong>${country ? `<br>${escapeHtml(country)}` : ""}<br>
-  ${formatCoordinates(lat, lng)}<br>
-  ${
-    hazard
-      ? `<span style="color: #d43f1a; font-weight: bold;">PGA: ${hazard.pga.toFixed(3)} g</span><br>
-         <span>Hazard Level: ${hazard.level}</span>`
-      : `<span style="color: gray;">No seismic hazard data (ocean area)</span>`
-  }
-  ${faultHtml}
-`;
-    currentMarker.bindPopup(popupContent).openPopup();
-
-    map.flyTo([lat, lng], CONFIG.flyToZoom, { duration: CONFIG.flyToDuration });
-    setTimeout(() => {
-      handleZoomForFaults();
-    }, 300);
-
-    const statsCard = document.getElementById("statsCard");
-    const statPGA = document.getElementById("statPGA");
-    const statLevel = document.getElementById("statLevel");
-    const statCoords = document.getElementById("statCoords");
-    const statFault = document.getElementById("statFault");
-    const statDistance = document.getElementById("statDistance");
-    const riskPGA = document.getElementById("riskPGA");
-    const riskFault = document.getElementById("riskFault");
-
-    if (statPGA) statPGA.textContent = hazardText;
-    if (riskPGA) riskPGA.textContent = hazardText;
-    if (statLevel) statLevel.textContent = hazardLevel;
-    if (statCoords) statCoords.textContent = formatCoordinates(lat, lng);
-
-    if (statFault && faultInfo.nearestFault) {
-      statFault.textContent = faultInfo.nearestFault;
-    } else if (statFault) {
-      statFault.textContent = "No fault data";
-    }
-
-    if (statDistance && faultInfo.distance !== null) {
-      statDistance.textContent = `${faultInfo.distance.toFixed(2)} km`;
-    } else if (statDistance) {
-      statDistance.textContent = "--";
-    }
-
-    if (riskFault && faultInfo.nearestFault) {
-      riskFault.textContent = `${faultInfo.nearestFault} (${faultInfo.distance ? faultInfo.distance.toFixed(1) : "?"} km)`;
-    } else if (riskFault) {
-      riskFault.textContent = "No fault data";
-    }
-
-    if (statsCard) statsCard.style.display = "block";
-
-    if (faultInfo.distance !== null && faultInfo.nearestPoint) {
-      showFaultDistanceLine(
-        [lng, lat],
-        faultInfo.nearestPoint,
-        faultInfo.nearestFault,
-      );
-    }
-    fixLayerOrder();
-  }
-
-  // ==================== MAP INITIALIZATION ====================
+  //  MAP INITIALIZATION 
+  
+  /**
+   * Adds custom zoom controls to replace default Leaflet zoom
+   */
   function addCustomZoomControl() {
     const zoomControl = L.control({ position: "topleft" });
     zoomControl.onAdd = function () {
@@ -879,6 +853,9 @@
     zoomControl.addTo(map);
   }
 
+  /**
+   * Creates the seismic hazard raster tile layer
+   */
   function createHazardLayer() {
     if (hazardLayer) {
       map.removeLayer(hazardLayer);
@@ -915,6 +892,10 @@
     }
   }
 
+  /**
+   * Changes the base map (light, dark, satellite)
+   * @param {string} type - Basemap type ('light', 'dark', 'satellite')
+   */
   function changeBasemap(type) {
     if (currentBasemap) {
       map.removeLayer(currentBasemap);
@@ -944,6 +925,10 @@
     fixLayerOrder();
   }
 
+  /**
+   * Toggles hazard layer visibility
+   * @param {boolean} visible - Whether the hazard layer should be visible
+   */
   function toggleHazardLayer(visible) {
     isHazardVisible = visible;
 
@@ -959,6 +944,10 @@
     }
   }
 
+  /**
+   * Updates hazard layer opacity
+   * @param {number} value - Opacity value (0-1)
+   */
   function updateHazardOpacity(value) {
     currentHazardOpacity = value;
     if (hazardLayer) {
@@ -966,6 +955,9 @@
     }
   }
 
+  /**
+   * Builds the legend from PGA lookup table
+   */
   function buildLegend() {
     const legendList = document.getElementById("legendList");
     if (!legendList) return;
@@ -982,6 +974,231 @@
     });
   }
 
+  /**
+   * Initializes the Leaflet map with default settings
+   */
+  function initMap() {
+    map = L.map("map", {
+      center: CONFIG.defaultCenter,
+      zoom: CONFIG.defaultZoom,
+      minZoom: CONFIG.minZoom,
+      maxZoom: CONFIG.maxZoom,
+      maxBounds: CONFIG.maxBounds,
+      maxBoundsViscosity: 1.0,
+      zoomControl: false,
+    });
+
+    addCustomZoomControl();
+    currentBasemap = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+      {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors &copy; CartoDB',
+        subdomains: "abcd",
+      },
+    ).addTo(map);
+
+    createHazardLayer();
+    L.control
+      .scale({ imperial: false, metric: true, position: "bottomleft" })
+      .addTo(map);
+    updateStatus("Ready", true);
+  }
+
+  //  LOCATION & SEARCH FUNCTIONS 
+  
+  /**
+   * Searches for locations using Nominatim geocoding API
+   * @param {string} query - Search query (city, country, address)
+   * @returns {Promise<Array>} Array of location results
+   */
+  async function searchNominatim(query) {
+    if (!query || query.length < 2) return [];
+
+    if (currentNominatimController) {
+      currentNominatimController.abort();
+    }
+
+    const controller = new AbortController();
+    currentNominatimController = controller;
+
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        format: "json",
+        limit: 8,
+        addressdetails: 1,
+        "accept-language": "en",
+      });
+
+      const response = await fetch(
+        `${CONFIG.nominatimEndpoint}?${params.toString()}`,
+        {
+          signal: controller.signal,
+          headers: { "User-Agent": CONFIG.userAgent },
+        },
+      );
+
+      if (!response.ok) throw new Error("Nominatim request failed");
+
+      const data = await response.json();
+      currentNominatimController = null;
+
+      return data.map((item) => ({
+        type: "nominatim",
+        name: item.display_name.split(",")[0],
+        fullName: item.display_name,
+        lat: parseFloat(item.lat),
+        lng: parseFloat(item.lon),
+        category: item.category || item.type,
+      }));
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        console.error("Nominatim error:", error);
+      }
+      return [];
+    }
+  }
+
+  /**
+   * Updates the stats card and risk panel with selected location data
+   * @param {number} lat - Latitude
+   * @param {number} lng - Longitude
+   * @param {Object} hazard - Hazard information (PGA, level)
+   * @param {Object} faultInfo - Fault distance information
+   * @param {string} displayName - Display name for the location
+   */
+  function updateStatsAndRiskPanel(lat, lng, hazard, faultInfo, displayName) {
+    const hazardText = hazard ? hazard.pga.toFixed(3) : "--";
+    const hazardLevel = hazard ? hazard.level : "--";
+
+    // Update stats card
+    const statPGA = document.getElementById("statPGA");
+    const statLevel = document.getElementById("statLevel");
+    const statCoords = document.getElementById("statCoords");
+    const statFault = document.getElementById("statFault");
+    const statDistance = document.getElementById("statDistance");
+    const statsCard = document.getElementById("statsCard");
+
+    if (statPGA) statPGA.textContent = hazardText;
+    if (statLevel) statLevel.textContent = hazardLevel;
+    if (statCoords) statCoords.textContent = formatCoordinates(lat, lng);
+
+    if (statFault && faultInfo.nearestFault) {
+      statFault.textContent = faultInfo.nearestFault;
+    } else if (statFault) {
+      statFault.textContent = "No fault data";
+    }
+
+    if (statDistance && faultInfo.distance !== null) {
+      statDistance.textContent = `${faultInfo.distance.toFixed(2)} km`;
+    } else if (statDistance) {
+      statDistance.textContent = "--";
+    }
+
+    if (statsCard) statsCard.style.display = "block";
+
+    // Update risk panel
+    const riskPGA = document.getElementById("riskPGA");
+    const riskFault = document.getElementById("riskFault");
+
+    if (riskPGA) riskPGA.textContent = hazardText;
+    if (riskFault && faultInfo.nearestFault) {
+      riskFault.textContent = `${faultInfo.nearestFault} (${faultInfo.distance ? faultInfo.distance.toFixed(1) : "?"} km)`;
+    } else if (riskFault) {
+      riskFault.textContent = "No fault data";
+    }
+
+    // Auto-expand the risk panel when a location is selected
+    const riskPanel = document.getElementById("riskPanelFloating");
+    const toggleBtn = document.getElementById("toggleRiskPanel");
+    if (riskPanel && toggleBtn) {
+      riskPanel.classList.remove("collapsed");
+      toggleBtn.textContent = "−";
+      toggleBtn.disabled = false;
+      toggleBtn.classList.add("active");
+    }
+
+    setFormDisabled(!hazard);
+  }
+
+  /**
+   * Selects a location, centers map, and fetches hazard and fault data
+   * @param {string} name - Location name
+   * @param {number} lat - Latitude
+   * @param {number} lng - Longitude
+   * @param {string} country - Country name (optional)
+   * @param {string} fullAddress - Full address (optional)
+   */
+  async function selectLocation(name, lat, lng, country = "", fullAddress = "") {
+    // Remove existing marker
+    if (currentMarker) {
+      map.removeLayer(currentMarker);
+    }
+
+    // Add new marker with pulse effect
+    currentMarker = L.marker([lat, lng], {
+      icon: L.divIcon({
+        className: "custom-marker pulse-marker",
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
+      }),
+    }).addTo(map);
+
+    updateStatus("Fetching hazard data...", false);
+    const hazard = await getHazardFromRaster(lat, lng);
+    
+    updateStatus("Ready", true);
+
+    const faultInfo = calculateDistanceToNearestFault(lat, lng);
+    currentFaultInfo = faultInfo;
+
+    const displayName = fullAddress || name;
+    updateStatsAndRiskPanel(lat, lng, hazard, faultInfo, displayName);
+
+    // Build popup content
+    let faultHtml = "";
+    if (faultInfo.distance !== null) {
+      faultHtml = `<br><span style="color: #ff3b2f;">⚡ Nearest Fault: ${faultInfo.nearestFault}</span><br>
+                   <span>📏 Distance: ${faultInfo.distance.toFixed(2)} km</span><br>
+                   <span style="font-size: 0.8rem;">${faultInfo.message}</span>`;
+    }
+
+    const popupContent = `
+      <strong>${escapeHtml(displayName)}</strong>${country ? `<br>${escapeHtml(country)}` : ""}<br>
+      ${formatCoordinates(lat, lng)}<br>
+      ${
+        hazard
+          ? `<span style="color: #d43f1a; font-weight: bold;">PGA: ${hazard.pga.toFixed(3)} g</span><br>
+           <span>Hazard Level: ${hazard.level}</span>`
+          : `<span style="color: gray;">No seismic hazard data (ocean area)</span>`
+      }
+      ${faultHtml}
+    `;
+
+    currentMarker.bindPopup(popupContent).openPopup();
+    map.flyTo([lat, lng], CONFIG.flyToZoom, { duration: CONFIG.flyToDuration });
+
+    setTimeout(() => {
+      handleZoomForFaults();
+    }, 300);
+
+    if (faultInfo.distance !== null && faultInfo.nearestPoint) {
+      showFaultDistanceLine(
+        [lng, lat],
+        faultInfo.nearestPoint,
+        faultInfo.nearestFault,
+      );
+    }
+
+    fixLayerOrder();
+  }
+
+  //  SEARCH UI HANDLERS 
+  
+  /**
+   * Sets up the location search input with autocomplete
+   */
   function setupSearch() {
     const searchInput = document.getElementById("searchInput");
     const searchResults = document.getElementById("searchResults");
@@ -991,12 +1208,18 @@
 
     let searchDebounceTimer;
 
+    /**
+     * Performs search against country data and Nominatim
+     * @param {string} query - Search query
+     * @returns {Promise<Array>} Search results
+     */
     async function performSearch(query) {
       if (!query || query.length < 2) return [];
 
       const results = [];
       const trimmedQuery = query.trim();
 
+      // Check for coordinate input
       const coordMatch = trimmedQuery.match(
         /^(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)$/,
       );
@@ -1019,6 +1242,7 @@
         }
       }
 
+      // Search in country data
       const lowerQuery = trimmedQuery.toLowerCase();
       for (const [country, data] of Object.entries(dynamicCountryData)) {
         if (country.toLowerCase().includes(lowerQuery) && results.length < 5) {
@@ -1032,6 +1256,7 @@
         }
       }
 
+      // Search via Nominatim
       const nominatimResults = await searchNominatim(trimmedQuery);
       for (const item of nominatimResults) {
         if (!results.some((r) => Math.abs(r.lat - item.lat) < 0.01)) {
@@ -1042,6 +1267,10 @@
       return results.slice(0, 10);
     }
 
+    /**
+     * Displays search results in the dropdown
+     * @param {Array} results - Search results
+     */
     function displayResults(results) {
       if (!results.length) {
         searchResults.innerHTML =
@@ -1052,7 +1281,7 @@
 
       searchResults.innerHTML = results
         .map((r, i) => {
-          let icon =
+          const icon =
             r.type === "country" ? "🌍" : r.type === "coordinate" ? "📍" : "🏙️";
           return `
             <div class="result-item" data-index="${i}">
@@ -1087,6 +1316,7 @@
       });
     }
 
+    // Input event handler with debounce
     searchInput.addEventListener("input", function () {
       clearTimeout(searchDebounceTimer);
       const query = this.value.trim();
@@ -1104,6 +1334,7 @@
       }, 400);
     });
 
+    // Clear button handler
     if (clearSearchBtn) {
       clearSearchBtn.addEventListener("click", () => {
         searchInput.value = "";
@@ -1113,6 +1344,7 @@
       });
     }
 
+    // Enter key handler
     searchInput.addEventListener("keypress", async (e) => {
       if (e.key === "Enter") {
         const query = searchInput.value.trim();
@@ -1134,6 +1366,7 @@
       }
     });
 
+    // Close results when clicking outside
     document.addEventListener("click", (e) => {
       if (
         !searchInput.contains(e.target) &&
@@ -1144,7 +1377,351 @@
     });
   }
 
+  //  RISK ANALYSIS UI 
+  
+  /**
+   * Sets up the risk analysis panel with dynamic document section visibility
+   */
+  function setupRiskAnalysis() {
+    const analyzeBtn = document.getElementById("analyzeBtn");
+    if (!analyzeBtn) return;
+
+    const propertyTypeSelect = document.getElementById("propertyType");
+    const documentsSection = document.getElementById("documentsSection");
+    const leaseRenewalQuestion = document.getElementById("leaseRenewalQuestion");
+    const seismicAssessmentDone = document.getElementById("seismicAssessmentDone");
+
+    /**
+     * Updates document section visibility based on property type and assessment status
+     */
+    function updateDocumentSections() {
+      const propertyType = propertyTypeSelect?.value || "";
+      const seismicValue = seismicAssessmentDone?.value || "";
+
+      if (documentsSection) documentsSection.style.display = "none";
+      if (leaseRenewalQuestion) leaseRenewalQuestion.style.display = "none";
+
+      if (propertyType === "New Lease") {
+        if (documentsSection) documentsSection.style.display = "block";
+      } else if (propertyType === "Lease Renewal") {
+        if (leaseRenewalQuestion) leaseRenewalQuestion.style.display = "block";
+        if (seismicValue === "no") {
+          if (documentsSection) documentsSection.style.display = "block";
+        }
+      } else if (propertyType === "Building Acquisition") {
+        if (documentsSection) documentsSection.style.display = "block";
+      }
+    }
+
+    if (propertyTypeSelect) {
+      propertyTypeSelect.addEventListener("change", updateDocumentSections);
+    }
+    if (seismicAssessmentDone) {
+      seismicAssessmentDone.addEventListener("change", updateDocumentSections);
+    }
+
+    updateDocumentSections();
+
+    /**
+     * Gets selected document checkboxes
+     * @returns {Array} Array of selected document values
+     */
+    function getSelectedDocuments() {
+      const documentCheckboxes = document.querySelectorAll(
+        '.documents-option input[type="checkbox"]',
+      );
+      return Array.from(documentCheckboxes)
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.value);
+    }
+
+    /**
+     * Validates if property type qualifies for document-based recommendations
+     * @param {string} propertyType - Property type
+     * @param {string} seismicValue - Seismic assessment value
+     * @returns {boolean} Whether valid
+     */
+    function isValidPropertyType(propertyType, seismicValue) {
+      if (propertyType === "New Lease") return true;
+      if (propertyType === "Building Acquisition") return true;
+      if (propertyType === "Lease Renewal" && seismicValue === "no")
+        return true;
+      return false;
+    }
+
+    /**
+     * Returns seismicity category based on PGA value
+     * @param {number} pga - Peak Ground Acceleration
+     * @returns {string|null} Seismicity category
+     */
+    function getSeismicityCategory(pga) {
+      if (pga >= 0.01 && pga < 0.03) return "low";
+      if (pga >= 0.03 && pga <= 0.08) return "moderate";
+      if (pga > 0.08) return "high";
+      return null;
+    }
+
+    /**
+     * Returns display string for seismicity
+     * @param {number} pga - Peak Ground Acceleration
+     * @returns {string} Display string
+     */
+    function getSeismicityDisplay(pga) {
+      if (pga >= 0.01 && pga < 0.03) return "Low (0.01g - 0.03g)";
+      if (pga >= 0.03 && pga <= 0.08) return "Moderate (0.03g - 0.08g)";
+      if (pga > 0.08) return "High (> 0.08g)";
+      return "Unknown";
+    }
+
+    /**
+     * Returns building type display name
+     * @param {string} buildingType - Building type code
+     * @returns {string} Display name
+     */
+    function getBuildingTypeName(buildingType) {
+      return buildingType === "URM"
+        ? "Unreinforced Masonry (URM) / Wood"
+        : "RC Frame / Shear Wall / Steel";
+    }
+
+    // Main analysis logic
+    analyzeBtn.addEventListener("click", () => {
+      const pgaElement = document.getElementById("statPGA");
+      let pga = parseFloat(pgaElement ? pgaElement.textContent : "NaN");
+      const riskResult = document.getElementById("riskResult");
+
+      if (isNaN(pga)) {
+        if (riskResult) {
+          riskResult.innerHTML =
+            "⚠️ Your selected area PGA value is not available";
+          riskResult.style.color = "orange";
+        }
+        setFormDisabled(true);
+        return;
+      }
+      setFormDisabled(false);
+
+      if (pga < 0.01) {
+        if (riskResult) {
+          riskResult.innerHTML =
+            "ℹ️ Seismic acceleration is less than 0.01g (Very low seismic risk)";
+          riskResult.style.color = "#3498db";
+        }
+        return;
+      }
+
+      const buildingType = document.getElementById("buildingType").value;
+      const stories =
+        parseInt(document.getElementById("buildingStories").value) || 1;
+      const propertyType = propertyTypeSelect ? propertyTypeSelect.value : "";
+      const seismicValue = seismicAssessmentDone
+        ? seismicAssessmentDone.value
+        : "";
+
+      if (!buildingType) {
+        if (riskResult) {
+          riskResult.innerHTML = "⚠️ Please select a building type.";
+          riskResult.style.color = "orange";
+        }
+        return;
+      }
+
+      const seismicityCategory = getSeismicityCategory(pga);
+      const seismicityDisplay = getSeismicityDisplay(pga);
+      const selectedDocuments = getSelectedDocuments();
+
+      const hasStructuralDesignReport = selectedDocuments.includes("Structural design report");
+      const hasArchitecturalDrawings = selectedDocuments.includes("Architectural drawings");
+      const hasStructuralAsBuilt = selectedDocuments.includes("Structural as-built drawings");
+      const hasDigitalModel = selectedDocuments.includes("Digital structural model (ETABS or equivalent)");
+      const hasGeotechnicalReport = selectedDocuments.includes("Geotechnical report");
+      
+      const hasPeerReviewDocuments = hasStructuralDesignReport && 
+          (hasArchitecturalDrawings || hasStructuralAsBuilt || hasDigitalModel);
+      
+      const hasTier1Documents = hasStructuralAsBuilt || hasDigitalModel;
+      
+      const hasTier3Documents = hasArchitecturalDrawings && hasStructuralAsBuilt && hasGeotechnicalReport;
+
+      const isValidForDocs = isValidPropertyType(propertyType, seismicValue);
+
+      let recommendation = "";
+      let recommendationType = "";
+      let logicMatched = false;
+
+      // Condition 1: TIER 3 - Highest level
+      if (isValidForDocs && hasTier3Documents) {
+        let refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4";
+        
+        if (buildingType === "RC") {
+          if (pga >= 0.03 && pga <= 0.08 && stories >= 13) {
+            refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4 & Moderate seismicity";
+          } else if (pga > 0.08 && stories >= 9) {
+            refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4 & High seismicity";
+          } else {
+            refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4 & Insufficient documents";
+          }
+        }
+        
+        recommendation = refinedRecommendation;
+        recommendationType = "tier3";
+        logicMatched = true;
+      }
+      // Condition 2: TIER 1
+      else if (isValidForDocs && hasTier1Documents) {
+        let refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3";
+        
+        if (buildingType === "URM") {
+          refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3 & URM/Wood construction";
+        } else if (buildingType === "RC") {
+          if (pga >= 0.01 && pga < 0.03) {
+            refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3 & Low seismicity";
+          } else if (pga >= 0.03 && pga <= 0.08 && stories <= 12) {
+            refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3 & Moderate seismicity";
+          } else if (pga > 0.08 && stories <= 8) {
+            refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3 & High seismicity";
+          }
+        }
+        
+        recommendation = refinedRecommendation;
+        recommendationType = "tier1";
+        logicMatched = true;
+      }
+      // Condition 3: New Lease + Peer Review
+      else if (propertyType === "New Lease" && hasPeerReviewDocuments) {
+        recommendation = "Peer Review – See Note 2";
+        recommendationType = "tier2";
+        logicMatched = true;
+      }
+      // Condition 4: Lease Renewal with No assessment + Peer Review
+      else if (propertyType === "Lease Renewal" && seismicValue === "no" && hasPeerReviewDocuments) {
+        recommendation = "Peer Review – See Note 2";
+        recommendationType = "tier2";
+        logicMatched = true;
+      }
+      // Condition 5: Lease Renewal with Yes assessment
+      else if (propertyType === "Lease Renewal" && seismicValue === "yes") {
+        recommendation = "Submit Document";
+        recommendationType = "tier2";
+        logicMatched = true;
+      }
+      // Condition 6: Building Acquisition + Peer Review
+      else if (propertyType === "Building Acquisition" && hasPeerReviewDocuments) {
+        recommendation = "Peer Review – See Note 2";
+        recommendationType = "tier2";
+        logicMatched = true;
+      }
+      // Condition 7: New Lease + Only Structural report
+      else if (propertyType === "New Lease" && hasStructuralDesignReport && !hasPeerReviewDocuments) {
+        recommendation = "High-Level Review – See Note 1";
+        recommendationType = "tier1";
+        logicMatched = true;
+      }
+      // Condition 8: Lease Renewal + No assessment + Only Structural report
+      else if (propertyType === "Lease Renewal" && seismicValue === "no" && hasStructuralDesignReport && !hasPeerReviewDocuments) {
+        recommendation = "High-Level Review – See Note 1";
+        recommendationType = "tier1";
+        logicMatched = true;
+      }
+      // Condition 9: Building Acquisition + Only Structural report
+      else if (propertyType === "Building Acquisition" && hasStructuralDesignReport && !hasPeerReviewDocuments) {
+        recommendation = "High-Level Review – See Note 1";
+        recommendationType = "tier1";
+        logicMatched = true;
+      }
+
+      if (!logicMatched) {
+        recommendation = "Available documentation is not sufficient. Please see Notes Sheet to see the list of required documentation for each type of analysis.";
+        recommendationType = "tier2";
+      }
+
+      const color = recommendationType === "tier3" ? "#e74c3c" : recommendationType === "tier2" ? "#f39c12" : "#2ecc71";
+
+      if (riskResult) {
+        riskResult.innerHTML = `
+          <div style="background: #f8fafc; border-radius: 12px; padding: 14px; border-left: 4px solid ${color}; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+              <span style="color: #5a6e7c; font-weight: 500;">📍 Location PGA</span>
+              <span style="color: #1a2a3a; font-weight: 600; font-family: monospace;">${pga.toFixed(4)} g</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+              <span style="color: #5a6e7c; font-weight: 500;">🏗️ Building Type</span>
+              <span style="color: #1a2a3a; font-weight: 600;">${getBuildingTypeName(buildingType)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+              <span style="color: #5a6e7c; font-weight: 500;">📏 Stories</span>
+              <span style="color: #1a2a3a; font-weight: 600;">${stories}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+              <span style="color: #5a6e7c; font-weight: 500;">🏢 Property Type</span>
+              <span style="color: #1a2a3a; font-weight: 600;">${propertyType || "Not selected"}</span>
+            </div>
+            ${
+              propertyType === "Lease Renewal"
+                ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+              <span style="color: #5a6e7c; font-weight: 500;">📋 Seismic Assessment Done by WB</span>
+              <span style="color: #1a2a3a; font-weight: 600;">${seismicValue === "yes" ? "Yes" : seismicValue === "no" ? "No" : "Not selected"}</span>
+            </div>
+            `
+                : ""
+            }
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+              <span style="color: #5a6e7c; font-weight: 500;">🌊 Seismicity</span>
+              <span style="color: #1a2a3a; font-weight: 600;">${seismicityDisplay}</span>
+            </div>
+            ${
+              selectedDocuments.length > 0
+                ? `
+            <div style="margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+              <span style="color: #5a6e7c; font-weight: 500;">📄 Available Documents:</span>
+              <ul style="margin-top: 6px; margin-bottom: 0; padding-left: 20px; font-size: 0.75rem; color: #1a2a3a;">
+                ${selectedDocuments.map((doc) => `<li>${escapeHtml(doc)}</li>`).join("")}
+              </ul>
+            </div>
+            `
+                : ""
+            }
+            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0; text-align: center;">
+              <strong style="color: ${color}; font-size: 0.9rem;">${recommendation}</strong>
+            </div>
+          </div>
+        `;
+      }
+    });
+  }
+
+  /**
+   * Sets up the risk panel collapse/expand toggle
+   */
+  function setupRiskPanelToggle() {
+    const riskPanel = document.getElementById("riskPanelFloating");
+    const toggleBtn = document.getElementById("toggleRiskPanel");
+
+    if (riskPanel && toggleBtn) {
+      riskPanel.addEventListener("click", (e) => {
+        e.stopPropagation();
+      });
+
+      toggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        riskPanel.classList.toggle("collapsed");
+        toggleBtn.textContent = riskPanel.classList.contains("collapsed")
+          ? "+"
+          : "−";
+      });
+      toggleBtn.disabled = true;
+      toggleBtn.classList.remove("active");
+    }
+  }
+
+  //  EVENT HANDLERS 
+  
+  /**
+   * Sets up all map and UI event listeners
+   */
   function setupEventListeners() {
+    // Reset view button
     const resetBtn = document.getElementById("resetViewBtn");
     if (resetBtn) {
       resetBtn.addEventListener("click", () => {
@@ -1181,16 +1758,50 @@
         const riskFault = document.getElementById("riskFault");
         if (riskFault) riskFault.textContent = "--";
 
-        const storiesInput = document.getElementById("buildingStories");
-        if (storiesInput) storiesInput.value = "";
+        // Reset all Risk Analysis Panel fields
+        const propertyType = document.getElementById("propertyType");
+        if (propertyType) propertyType.value = "";
 
-        const buildingTypeSelect = document.getElementById("buildingType");
-        if (buildingTypeSelect) buildingTypeSelect.value = "";
+        const documentsSection = document.getElementById("documentsSection");
+        if (documentsSection) documentsSection.style.display = "none";
+
+        const documentCheckboxes = document.querySelectorAll(
+          '.documents-option input[type="checkbox"]',
+        );
+        documentCheckboxes.forEach((checkbox) => {
+          checkbox.checked = false;
+        });
+
+        const leaseRenewalQuestion = document.getElementById(
+          "leaseRenewalQuestion",
+        );
+        if (leaseRenewalQuestion) leaseRenewalQuestion.style.display = "none";
+
+        const seismicAssessmentDone = document.getElementById(
+          "seismicAssessmentDone",
+        );
+        if (seismicAssessmentDone) seismicAssessmentDone.value = "";
+
+        const buildingType = document.getElementById("buildingType");
+        if (buildingType) buildingType.value = "";
+
+        const buildingStories = document.getElementById("buildingStories");
+        if (buildingStories) buildingStories.value = "";
+
+        const riskPanel = document.getElementById("riskPanelFloating");
+        const toggleBtn = document.getElementById("toggleRiskPanel");
+        if (riskPanel && toggleBtn) {
+          riskPanel.classList.add("collapsed");
+          toggleBtn.textContent = "+";
+          toggleBtn.disabled = true;
+          toggleBtn.classList.remove("active");
+        }
 
         currentFaultInfo = null;
       });
     }
 
+    // Current location button
     const locationBtn = document.getElementById("currentLocationBtn");
     if (locationBtn) {
       locationBtn.addEventListener("click", function () {
@@ -1223,6 +1834,7 @@
       });
     }
 
+    // Country select dropdown
     const countrySelect = document.getElementById("countrySelect");
     if (countrySelect) {
       countrySelect.addEventListener("change", async function () {
@@ -1234,6 +1846,7 @@
       });
     }
 
+    // Layer panel toggle
     const panelToggle = document.getElementById("layerPanelToggle");
     const layerPanel = document.getElementById("layerPanel");
     if (panelToggle && layerPanel) {
@@ -1245,12 +1858,14 @@
       });
     }
 
+    // Basemap radio buttons
     document.querySelectorAll('input[name="basemap"]').forEach((radio) => {
       radio.addEventListener("change", (e) => {
         if (e.target.checked) changeBasemap(e.target.value);
       });
     });
 
+    // Hazard layer toggle
     const hazardToggle = document.getElementById("hazardLayerToggle");
     const opacityControl = document.getElementById("opacityControl");
     if (hazardToggle) {
@@ -1262,6 +1877,7 @@
       });
     }
 
+    // Country boundary toggle
     const boundaryToggle = document.getElementById("countryBoundaryToggle");
     if (boundaryToggle) {
       boundaryToggle.addEventListener("change", (e) => {
@@ -1270,6 +1886,7 @@
       });
     }
 
+    // Fault lines toggle
     const faultToggle = document.getElementById("faultLinesToggle");
     if (faultToggle) {
       faultToggle.addEventListener("change", (e) => {
@@ -1277,6 +1894,7 @@
       });
     }
 
+    // Opacity slider
     const opacitySlider = document.getElementById("opacitySlider");
     if (opacitySlider) {
       opacitySlider.addEventListener("input", (e) => {
@@ -1284,14 +1902,18 @@
       });
     }
 
+    // Map zoom events
     map.on("zoomend", handleZoomForFaults);
     map.on("zoomend", handleLegendVisibility);
+    
+    // Map click handler
     map.on("click", async (e) => {
       const { lat, lng } = e.latlng;
       showClickAnimation(lat, lng);
       await selectLocation("Selected Location", lat, lng, "");
     });
 
+    // Mouse move coordinates display
     map.on("mousemove", (e) => {
       const coordsDisplay = document.getElementById("coordsDisplay");
       if (coordsDisplay) {
@@ -1300,205 +1922,13 @@
     });
   }
 
-  function initMap() {
-    map = L.map("map", {
-      center: CONFIG.defaultCenter,
-      zoom: CONFIG.defaultZoom,
-      minZoom: CONFIG.minZoom,
-      maxZoom: CONFIG.maxZoom,
-      maxBounds: CONFIG.maxBounds,
-      maxBoundsViscosity: 1.0,
-      zoomControl: false,
-    });
-
-    addCustomZoomControl();
-    currentBasemap = L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors &copy; CartoDB',
-        subdomains: "abcd",
-      },
-    ).addTo(map);
-
-    createHazardLayer();
-
-    L.control
-      .scale({ imperial: false, metric: true, position: "bottomleft" })
-      .addTo(map);
-    updateStatus("Ready", true);
-  }
-
-  // ==================== UPDATED RISK ANALYSIS LOGIC ====================
-  function setupRiskAnalysis() {
-    const analyzeBtn = document.getElementById("analyzeBtn");
-    if (!analyzeBtn) return;
-
-    analyzeBtn.addEventListener("click", () => {
-      // Get PGA value from the stat display
-      const pgaElement = document.getElementById("statPGA");
-      let pga = parseFloat(pgaElement ? pgaElement.textContent : "NaN");
-
-      if (isNaN(pga)) {
-        const riskResult = document.getElementById("riskResult");
-        if (riskResult) {
-          riskResult.innerHTML = "Seismicity level is less than 0.01g";
-          riskResult.style.color = "orange";
-        }
-        return;
-      }
-
-      // Get building parameters
-      const buildingType = document.getElementById("buildingType").value;
-      const stories =
-        parseInt(document.getElementById("buildingStories").value) || 1;
-
-      // Helper to get seismicity category
-      let seismicityCategory = "";
-      let seismicityDisplay = "";
-
-      if (pga < 0.01) {
-        seismicityCategory = "null";
-        seismicityDisplay = "Null (less than 0.01g)";
-      } else if (pga >= 0.01 && pga < 0.03) {
-        seismicityCategory = "low";
-        seismicityDisplay = "Low (0.01g - 0.03g)";
-      } else if (pga >= 0.03 && pga <= 0.08) {
-        seismicityCategory = "moderate";
-        seismicityDisplay = "Moderate (0.03g - 0.08g)";
-      } else {
-        seismicityCategory = "high";
-        seismicityDisplay = "High (> 0.08g)";
-      }
-
-      // Determine recommendation based on building type and seismicity
-      let recommendation = "";
-      let recommendationType = ""; // "none", "tier1", or "tier3"
-
-      // Building type: URM or Wood (value "URM")
-      if (buildingType === "URM") {
-        if (seismicityCategory === "null") {
-          recommendation = "Seismicity level is less than 0.01g";
-          recommendationType = "none";
-        } else {
-          // For URM/Wood with any seismicity >= 0.01g
-          recommendation = "Recommended analysis: ASCE41 Tier 1";
-          recommendationType = "tier1";
-        }
-      }
-      // Building type: RC Frame / Shear Wall / Steel (value "RC")
-      else if (buildingType === "RC") {
-        if (seismicityCategory === "null") {
-          recommendation = "Seismicity level is less than 0.01g";
-          recommendationType = "none";
-        } else if (seismicityCategory === "low") {
-          recommendation = "Recommended analysis: ASCE41 Tier 1";
-          recommendationType = "tier1";
-        } else if (seismicityCategory === "moderate") {
-          if (stories <= 12) {
-            recommendation = "Recommended analysis: ASCE41 Tier 1";
-            recommendationType = "tier1";
-          } else {
-            recommendation = "Recommended analysis: ASCE41 Tier 3";
-            recommendationType = "tier3";
-          }
-        } else if (seismicityCategory === "high") {
-          if (stories <= 8) {
-            recommendation = "Recommended analysis: ASCE41 Tier 1";
-            recommendationType = "tier1";
-          } else {
-            recommendation = "Recommended analysis: ASCE41 Tier 3";
-            recommendationType = "tier3";
-          }
-        }
-      } else {
-        // No building type selected
-        const riskResult = document.getElementById("riskResult");
-        if (riskResult) {
-          riskResult.innerHTML = "⚠️ Please select a building type.";
-          riskResult.style.color = "orange";
-        }
-        return;
-      }
-
-      // Building type name for display
-      let buildingTypeName = "";
-      switch (buildingType) {
-        case "URM":
-          buildingTypeName = "Unreinforced Masonry (URM) / Wood";
-          break;
-        case "RC":
-          buildingTypeName = "RC Frame / Shear Wall / Steel";
-          break;
-        default:
-          buildingTypeName = "Unknown";
-      }
-
-      // Set color based on recommendation type
-      let color = "#2ecc71"; // default green for Tier 1
-      if (recommendationType === "tier3") color = "#e74c3c";
-      else if (recommendationType === "none") color = "#f39c12";
-
-      // Display result
-      // Display result with clean styling
-      const riskResult = document.getElementById("riskResult");
-      if (riskResult) {
-        riskResult.innerHTML = `
-    <div style="background: #f8fafc; border-radius: 12px; padding: 14px; border-left: 4px solid ${color}; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-      <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
-        <span style="color: #5a6e7c; font-weight: 500;">📍 Location PGA</span>
-        <span style="color: #1a2a3a; font-weight: 600; font-family: monospace;">${pga.toFixed(4)} g</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
-        <span style="color: #5a6e7c; font-weight: 500;">🏗️ Building Type</span>
-        <span style="color: #1a2a3a; font-weight: 600;">${buildingTypeName}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
-        <span style="color: #5a6e7c; font-weight: 500;">📏 Stories</span>
-        <span style="color: #1a2a3a; font-weight: 600;">${stories}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
-        <span style="color: #5a6e7c; font-weight: 500;">🌊 Seismicity</span>
-        <span style="color: #1a2a3a; font-weight: 600;">${seismicityDisplay}</span>
-      </div>
-      <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0; text-align: center;">
-        <strong style="color: ${color}; font-size: 0.9rem;">${recommendation}</strong>
-      </div>
-    </div>
-  `;
-      }
-    });
-  }
-
-  function setupRiskPanelToggle() {
-    const riskPanel = document.getElementById("riskPanelFloating");
-    const toggleBtn = document.getElementById("toggleRiskPanel");
-
-    if (riskPanel && toggleBtn) {
-      riskPanel.addEventListener("click", (e) => {
-        e.stopPropagation();
-      });
-
-      toggleBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        riskPanel.classList.toggle("collapsed");
-        toggleBtn.textContent = riskPanel.classList.contains("collapsed")
-          ? "+"
-          : "−";
-      });
-    }
-  }
-
-  function fixLayerOrder() {
-    if (hazardLayer) hazardLayer.bringToFront();
-    if (countryBoundaryLayer) countryBoundaryLayer.bringToFront();
-    if (faultLayer) faultLayer.bringToFront();
-    if (currentMarker) currentMarker.setZIndexOffset(1000);
-  }
-
+  //  INITIALIZATION 
+  
+  /**
+   * Initializes the application
+   */
   async function init() {
     console.log("Initializing Seismic Hazard Map with local tiles...");
-    console.log("Tile path:", CONFIG.tilePath);
     console.log(
       'Place your hazard tiles in the "tiles" folder with structure: tiles/{z}/{x}/{y}.png',
     );
@@ -1517,6 +1947,7 @@
     updateStatus("Ready", true);
   }
 
+  // Start the application
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {

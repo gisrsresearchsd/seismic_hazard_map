@@ -2,10 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
       content="Global Seismic Hazard Map - Peak Ground Acceleration (PGA) data from GEM Foundation with Fault Line Analysis"
@@ -35,7 +32,12 @@
       <!-- Header -->
       <header class="app-header">
         <div class="logo">
-          <img src="./assets/MI_Black.png" alt="Logo" class="logo-img" />
+          <img
+            src="./assets/MI_Black.png"
+            alt="Company Logo"
+            class="logo-img"
+            loading="lazy"
+          />
           <h1>Global Seismic Hazard Map</h1>
         </div>
         <div class="header-badge">
@@ -104,6 +106,7 @@
                     <a
                       href="https://doi.org/10.5281/zenodo.8409647"
                       target="_blank"
+                      rel="noopener noreferrer"
                     >
                       DOI Link
                     </a>
@@ -117,6 +120,7 @@
                     <a
                       href="https://github.com/GEMScienceTools/gem-global-active-faults"
                       target="_blank"
+                      rel="noopener noreferrer"
                     >
                       GitHub Source
                     </a>
@@ -130,6 +134,7 @@
                     <a
                       href="https://github.com/datasets/geo-countries"
                       target="_blank"
+                      rel="noopener noreferrer"
                     >
                       Dataset Repo
                     </a>
@@ -164,13 +169,20 @@
 
         <!-- Map Container -->
         <div class="map-wrapper">
-          <div id="map"></div>
+          <div id="map" aria-label="Global seismic hazard map"></div>
 
           <!-- Risk Analysis Panel -->
           <div class="risk-panel-floating collapsed" id="riskPanelFloating">
             <div class="risk-header">
               <span>🏢 Recommended Type of Analysis</span>
-              <button id="toggleRiskPanel" class="risk-toggle-btn">+</button>
+              <button
+                id="toggleRiskPanel"
+                class="risk-toggle-btn"
+                aria-label="Toggle risk panel"
+                disabled
+              >
+                +
+              </button>
             </div>
             <div class="risk-body">
               <div id="pgaDisplay" style="margin-bottom: 10px">
@@ -183,15 +195,126 @@
                 <strong>⚡ Nearest Fault:</strong>
                 <span id="riskFault">--</span>
               </div>
+              <label for="propertyType">Type of Property</label>
+              <select id="propertyType">
+                <option value="" disabled selected>Select property type</option>
+                <option value="New Lease">New Lease</option>
+                <option value="Lease Renewal">Lease Renewal</option>
+                <option value="Building Acquisition">
+                  Building Acquisition
+                </option>
+              </select>
 
-              <label>🏗️ Building Type</label>
-              <select id="buildingType" required>
+              <div
+                id="leaseRenewalQuestion"
+                style="display: none; margin-bottom: 12px"
+              >
+                <label for="seismicAssessmentDone"
+                  >Has the seismic assessment already been conducted by
+                  WB?</label
+                >
+                <select id="seismicAssessmentDone">
+                  <option value="" disabled selected>Select an option</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
+
+              <!-- Documents Section - Multiple Choice Style (One per line) -->
+              <div
+                id="documentsSection"
+                class="documents-group"
+                style="display: none"
+              >
+                <label class="documents-label"
+                  >Which design and construction documents are
+                  available?</label
+                >
+                <div class="documents-container">
+                  <div class="documents-list">
+                    <label class="documents-option">
+                      <input type="checkbox" value="Structural design report" />
+                      <span>Structural design report</span>
+                    </label>
+
+                    <label class="documents-option">
+                      <input type="checkbox" value="Architectural drawings" />
+                      <span>Architectural drawings</span>
+                    </label>
+
+                    <label class="documents-option">
+                      <input
+                        type="checkbox"
+                        value="Structural as-built drawings"
+                      />
+                      <span>Structural as-built drawings</span>
+                    </label>
+
+                    <label class="documents-option">
+                      <input
+                        type="checkbox"
+                        value="Floor plan showing structural columns and walls location"
+                      />
+                      <span
+                        >Floor plan showing structural columns and walls
+                        location</span
+                      >
+                    </label>
+
+                    <label class="documents-option">
+                      <input
+                        type="checkbox"
+                        value="Digital structural model (ETABS or equivalent)"
+                      />
+                      <span
+                        >Digital structural model (ETABS or equivalent)</span
+                      >
+                    </label>
+
+                    <label class="documents-option">
+                      <input
+                        type="checkbox"
+                        value="Inspection/material testing reports"
+                      />
+                      <span>Inspection/material testing reports</span>
+                    </label>
+
+                    <label class="documents-option">
+                      <input
+                        type="checkbox"
+                        value="Building maintenance records"
+                      />
+                      <span>Building maintenance records</span>
+                    </label>
+
+                    <label class="documents-option">
+                      <input
+                        type="checkbox"
+                        value="Mechanical, Electrical and Plumbing (MEP) construction documentation"
+                      />
+                      <span
+                        >Mechanical, Electrical and Plumbing (MEP) construction
+                        documentation</span
+                      >
+                    </label>
+
+                    <label class="documents-option">
+                      <input type="checkbox" value="Geotechnical report" />
+                      <span>Geotechnical report</span>
+                    </label>
+                  </div>
+                </div>
+              </div>        
+              
+
+              <label for="buildingType">Building Type</label>
+              <select id="buildingType">
                 <option value="" disabled selected>Select Building Type</option>
                 <option value="URM">Unreinforced Masonry / Wood</option>
                 <option value="RC">RC Frame / Shear Wall / Steel</option>
               </select>
 
-              <label>📏 Number of Stories</label>
+              <label for="buildingStories">Number of Stories</label>
               <input
                 type="number"
                 id="buildingStories"
@@ -200,7 +323,7 @@
               />
 
               <button id="analyzeBtn" class="analyze-btn">Check</button>
-              <div id="riskResult"></div>
+              <div id="riskResult" aria-live="polite"></div>
             </div>
           </div>
 
@@ -208,7 +331,11 @@
           <div class="layer-panel-map" id="layerPanel">
             <div class="layer-panel-header">
               <span>🗺️ Layers</span>
-              <button class="layer-panel-toggle" id="layerPanelToggle">
+              <button
+                class="layer-panel-toggle"
+                id="layerPanelToggle"
+                aria-label="Toggle layer panel"
+              >
                 −
               </button>
             </div>
@@ -266,6 +393,7 @@
                   min="0"
                   max="100"
                   value="75"
+                  aria-label="Hazard layer opacity"
                 />
               </div>
             </div>
@@ -282,6 +410,7 @@
                 fill="none"
                 stroke="currentColor"
                 stroke-width="2"
+                aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -291,11 +420,13 @@
                 id="searchInput"
                 placeholder="Search city, country, or coordinates (e.g., 40.7128, -74.0060)"
                 autocomplete="off"
+                aria-label="Search location"
               />
               <button
                 class="clear-btn"
                 id="clearSearchBtn"
                 style="display: none"
+                aria-label="Clear search"
               >
                 ✕
               </button>
@@ -305,13 +436,18 @@
 
           <!-- Controls Group -->
           <div class="controls-group">
-            <select id="countrySelect" class="control-select">
+            <select
+              id="countrySelect"
+              class="control-select"
+              aria-label="Select a country"
+            >
               <option value="">🌍 Select a country...</option>
             </select>
             <button
               id="currentLocationBtn"
               class="control-btn location-icon-only"
               title="My Location"
+              aria-label="Use my current location"
             >
               <svg
                 width="20"
@@ -320,6 +456,7 @@
                 fill="none"
                 stroke="currentColor"
                 stroke-width="2"
+                aria-hidden="true"
               >
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                 <circle cx="12" cy="10" r="3"></circle>
@@ -329,6 +466,7 @@
               id="resetViewBtn"
               class="control-btn reset-btn"
               title="Reset View"
+              aria-label="Reset map view"
             >
               <svg
                 width="16"
@@ -337,6 +475,7 @@
                 fill="none"
                 stroke="currentColor"
                 stroke-width="2"
+                aria-hidden="true"
               >
                 <path
                   d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"
@@ -347,13 +486,13 @@
           </div>
 
           <!-- Coordinates Display -->
-          <div class="coords-display" id="coordsDisplay">
+          <div class="coords-display" id="coordsDisplay" aria-live="polite">
             <span>Lat: --°</span>
             <span>Lng: --°</span>
           </div>
 
           <!-- Status -->
-          <div class="map-status" id="mapStatus">
+          <div class="map-status" id="mapStatus" role="status">
             <span class="status-dot"></span>
             <span id="statusText">Initializing...</span>
           </div>

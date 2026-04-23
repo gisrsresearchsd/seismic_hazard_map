@@ -1,43 +1,39 @@
-/* ============================================
-   Global Seismic Hazard Map - Professional Theme (Cleaned)
-   ============================================ */
+/* Root Variables & Reset */
 
-/* --------------------------------------------
-   Root Variables & Reset
-   -------------------------------------------- */
 :root {
-  /* 🔵 PRIMARY BRAND */
+  /* Primary Brand */
   --blue-100: #005187;
   --blue-80: #2f6f9b;
   --blue-60: #6c8fb3;
   --blue-40: #9fb3c9;
   --blue-20: #cfd9e5;
 
-  /* ⚫ BLACK SYSTEM */
+  /* Black System */
   --black-100: #1d1d1b;
   --black-80: #3f3c3b;
   --black-60: #6a6766;
   --black-40: #a2a0a0;
   --black-20: #d1d0cf;
 
-  /* ⚪ GRAY SYSTEM */
+  /* Gray System */
   --gray-100: #315165;
   --gray-80: #5f6f80;
   --gray-60: #8893a0;
   --gray-40: #b4bcc6;
   --gray-20: #e3e7ec;
 
-  /* 🟡 ACCENT (from your palette) */
+  /* Accent */
   --yellow-100: #fec82f;
   --yellow-80: #f2d27a;
   --yellow-60: #ead9a0;
   --yellow-40: #efe4c2;
   --yellow-20: #f5eedb;
 
-  /* 🔥 MAP SPECIFIC */
+  /* Map Specific */
   --primary-color: var(--blue-100);
   --primary-dark: var(--black-100);
   --primary-light: var(--blue-60);
+  --bg-sidebar: rgba(255, 255, 255, 0.92);
 
   --text-primary: var(--black-100);
   --text-secondary: var(--gray-80);
@@ -46,6 +42,16 @@
   --bg-light: #f8fafc;
   --bg-white: #ffffff;
   --border-color: var(--gray-20);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
 }
 
 * {
@@ -59,16 +65,6 @@ body {
   font-size: 15px;
 }
 
-h1 {
-  font-size: 1.3rem;
-}
-h2 {
-  font-size: 1.1rem;
-}
-h3 {
-  font-size: 0.9rem;
-}
-
 body {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue",
@@ -79,9 +75,19 @@ body {
   overflow: hidden;
 }
 
-/* --------------------------------------------
-   App Layout
-   -------------------------------------------- */
+/* Typography */
+h1 {
+  font-size: 1.3rem;
+}
+h2 {
+  font-size: 1.1rem;
+}
+h3 {
+  font-size: 0.9rem;
+}
+
+/* App Layout */
+
 .app-container {
   display: flex;
   flex-direction: column;
@@ -136,9 +142,8 @@ body {
   overflow: hidden;
 }
 
-/* --------------------------------------------
-   Sidebar Styles
-   -------------------------------------------- */
+/* Sidebar Styles */
+
 .sidebar {
   width: 320px;
   background: var(--bg-sidebar);
@@ -285,11 +290,7 @@ body {
 
 /* Stats Card */
 .stats-card {
-  background: linear-gradient(
-  135deg,
-  var(--blue-100) 0%,
-  var(--blue-80) 100%
-);
+  background: linear-gradient(135deg, var(--blue-100) 0%, var(--blue-80) 100%);
   border-radius: var(--radius-md);
   padding: 16px;
   margin-bottom: 20px;
@@ -364,9 +365,8 @@ body {
   font-style: italic;
 }
 
-/* --------------------------------------------
-   Map Container
-   -------------------------------------------- */
+/* Map Container */
+
 .map-wrapper {
   flex: 1;
   position: relative;
@@ -392,9 +392,8 @@ body {
   cursor: crosshair;
 }
 
-/* --------------------------------------------
-   Layer Panel (Map Controls)
-   -------------------------------------------- */
+/* Layer Panel (Map Controls) */
+
 .layer-panel-map {
   position: absolute;
   bottom: 80px;
@@ -524,9 +523,8 @@ body {
   cursor: pointer;
 }
 
-/* --------------------------------------------
-   Search Container
-   -------------------------------------------- */
+/* Search Container */
+
 .search-container {
   position: absolute;
   top: 16px;
@@ -666,9 +664,7 @@ body {
   color: var(--text-muted);
 }
 
-/* --------------------------------------------
-   Controls Group (Top Right)
-   -------------------------------------------- */
+/* Controls Group (Top Right) */
 .controls-group {
   position: absolute;
   top: 16px;
@@ -750,9 +746,8 @@ body {
   display: block;
 }
 
-/* --------------------------------------------
-   Coordinates Display (Bottom Center)
-   -------------------------------------------- */
+/* Coordinates Display (Bottom Center) */
+
 .coords-display {
   position: absolute;
   bottom: 16px;
@@ -774,9 +769,8 @@ body {
   white-space: nowrap;
 }
 
-/* --------------------------------------------
-   Map Status Indicator
-   -------------------------------------------- */
+/* Map Status Indicator */
+
 .map-status {
   position: absolute;
   bottom: 46px;
@@ -806,9 +800,8 @@ body {
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 }
 
-/* --------------------------------------------
-   Custom Zoom Control (Top Left)
-   -------------------------------------------- */
+/* Custom Zoom Control (Top Left) */
+
 .custom-zoom-control {
   position: absolute;
   top: 8px;
@@ -847,9 +840,8 @@ body {
   display: none;
 }
 
-/* --------------------------------------------
-   Leaflet Overrides
-   -------------------------------------------- */
+/* Leaflet Overrides */
+
 .leaflet-control-scale {
   position: absolute !important;
   bottom: 16px !important;
@@ -894,9 +886,8 @@ body {
   color: rgba(255, 255, 255, 0.9) !important;
 }
 
-/* --------------------------------------------
-   Fault Line Styles
-   -------------------------------------------- */
+/* Fault Line Styles */
+
 .fault-line {
   stroke: var(--blue-100);
   stroke-width: 2;
@@ -921,20 +912,19 @@ body {
   white-space: nowrap;
 }
 
-/* --------------------------------------------
-   Risk Panel (Floating)
-   -------------------------------------------- */
+/* Risk Panel (Floating) - FIXED VERSION */
+
 .risk-panel-floating {
   position: absolute;
   top: 16px;
   left: 70px;
-  width: 280px;
+  width: 340px;
+  max-width: calc(100% - 32px);
   background: white;
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   z-index: 1100;
-  overflow: hidden;
-  transition: all 0.3s ease;
+  overflow: visible;
   border: 1px solid var(--border-color);
 }
 
@@ -970,7 +960,28 @@ body {
 }
 
 .risk-body {
-  padding: 16px;
+  padding: 14px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+/* Scrollbar for risk body */
+.risk-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.risk-body::-webkit-scrollbar-track {
+  background: var(--bg-light);
+  border-radius: 3px;
+}
+
+.risk-body::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.risk-body::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .risk-panel-floating.collapsed .risk-body {
@@ -979,20 +990,20 @@ body {
 
 .risk-body label {
   display: block;
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--text-secondary);
-  margin-top: 12px;
+  margin-top: 10px;
   margin-bottom: 4px;
 }
 
 .risk-body select,
 .risk-body input {
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-family: inherit;
   background: var(--bg-white);
   transition: border-color 0.2s;
@@ -1014,7 +1025,7 @@ body {
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  margin-top: 16px;
+  margin-top: 14px;
   transition: background 0.2s;
 }
 
@@ -1022,19 +1033,26 @@ body {
   background: var(--primary-dark);
 }
 
+/* Risk Result - FIXED VERSION */
 #riskResult {
-  margin-top: 16px;
-  font-size: 0.85rem;
-  line-height: 1.5;
+  margin-top: 14px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 #riskResult > div {
   background: #f8fafc !important;
   border-radius: 12px !important;
-  padding: 14px !important;
+  padding: 12px !important;
   border-left: 4px solid var(--blue-100) !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   transition: all 0.2s ease;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 #riskResult > div:hover {
@@ -1053,22 +1071,22 @@ body {
 
 #pgaDisplay {
   background: var(--bg-light);
-  padding: 10px;
+  padding: 8px;
   border-radius: var(--radius-sm);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 #faultDisplay {
   background: rgba(0, 81, 135, 0.08);
-  padding: 8px;
+  padding: 6px;
   border-radius: var(--radius-sm);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
 }
 
 #riskPGA {
   font-weight: 700;
   color: var(--primary-color);
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 #riskFault {
@@ -1076,9 +1094,81 @@ body {
   color: var(--blue-100);
 }
 
-/* --------------------------------------------
-   Attribution & Modern Info Panel
-   -------------------------------------------- */
+/* Documents Section - Clean Professional Style */
+#documentsSection {
+  margin-top: 12px;
+  padding: 0;
+}
+
+.documents-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.documents-container {
+  background: var(--bg-light);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.documents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.documents-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.documents-option:hover {
+  background: rgba(0, 81, 135, 0.05);
+}
+
+.documents-option input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--primary-color);
+}
+
+.documents-option span {
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  flex: 1;
+}
+
+/* Scrollbar for documents container */
+.documents-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.documents-container::-webkit-scrollbar-track {
+  background: var(--bg-light);
+  border-radius: 2px;
+}
+
+.documents-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+/* Attribution & Modern Info Panel */
+
 .modern-attribution summary {
   font-weight: 600;
   cursor: pointer;
@@ -1145,23 +1235,7 @@ body {
   color: var(--text-muted);
 }
 
-/* --------------------------------------------
-   Utility & Animations
-   -------------------------------------------- */
-#legendSection {
-  transition:
-    opacity 0.25s ease,
-    transform 0.25s ease;
-  opacity: 1;
-  transform: translateY(0);
-  will-change: opacity, transform;
-}
-
-#legendSection.hidden {
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
-}
+/* Animations & Utilities */
 
 @keyframes spin {
   to {
@@ -1179,9 +1253,53 @@ body {
   }
 }
 
-/* --------------------------------------------
-   Scrollbar Styles
-   -------------------------------------------- */
+.pulse-marker {
+  width: 12px;
+  height: 12px;
+  background: var(--blue-100);
+  border-radius: 50%;
+  position: relative;
+}
+
+.pulse-marker::after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(0, 81, 135, 0.4);
+  animation: pulse 1.5s infinite;
+}
+
+.animated-line {
+  stroke-dasharray: 8, 6;
+  animation: dashMove 1s linear infinite;
+}
+
+@keyframes dashMove {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+/* Legend Visibility */
+#legendSection {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+  opacity: 1;
+  transform: translateY(0);
+  will-change: opacity, transform;
+}
+
+#legendSection.hidden {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+/* Scrollbar Styles */
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -1201,9 +1319,8 @@ body {
   background: var(--text-muted);
 }
 
-/* --------------------------------------------
-   Responsive Design (Mobile)
-   -------------------------------------------- */
+/* Responsive Design (Mobile) */
+
 @media (max-width: 768px) {
   .sidebar {
     position: absolute;
@@ -1255,49 +1372,27 @@ body {
     left: 16px;
     top: 80px;
     width: calc(100% - 32px);
-    max-width: 320px;
+    max-width: 340px;
+  }
+  
+  .documents-container {
+    max-height: 140px;
+  }
+  
+  .documents-option span {
+    font-size: 0.7rem;
+  }
+  
+  .risk-body {
+    max-height: calc(100vh - 280px);
   }
 }
-.pulse-marker {
-  width: 12px;
-  height: 12px;
-  background: var(--blue-100);
-  border-radius: 50%;
-  position: relative;
+.risk-toggle-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.pulse-marker::after {
-  content: "";
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: rgba(0, 81, 135, 0.4);
-  animation: pulse 1.5s infinite;
+.risk-toggle-btn.active {
+  opacity: 1;
+  cursor: pointer;
 }
-
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(3);
-    opacity: 0;
-  }
-}
-.animated-line {
-  stroke-dasharray: 8, 6;
-  animation: dashMove 1s linear infinite;
-}
-
-@keyframes dashMove {
-  to {
-    stroke-dashoffset: -14;
-  }
-}
-
-.text-primary { color: var(--blue-100); }
-.text-muted { color: var(--gray-60); }
-.bg-primary { background: var(--blue-100); }
-.bg-soft { background: var(--gray-20); }
