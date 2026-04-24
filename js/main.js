@@ -380,30 +380,27 @@
    * @returns {Object} PGA value and hazard level
    */
   function findClosestHazard(r, g, b) {
-  let minDist = Infinity;
-  let closest = null;
+    let minDist = Infinity;
+    let closest = null;
 
-  for (const hazard of PGA_LOOKUP_TABLE) {
-    const [cr, cg, cb] = hazard.color;
+    for (const hazard of PGA_LOOKUP_TABLE) {
+      const [cr, cg, cb] = hazard.color;
 
-    const dist =
-      (r - cr) ** 2 +
-      (g - cg) ** 2 +
-      (b - cb) ** 2;
+      const dist = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
 
-    if (dist < minDist) {
-      minDist = dist;
-      closest = hazard;
+      if (dist < minDist) {
+        minDist = dist;
+        closest = hazard;
+      }
     }
-  }
 
-  return {
-    pga: (closest.min + closest.max) / 2,
-    level: closest.level,
-    min: closest.min,
-    max: closest.max,
-  };
-}
+    return {
+      pga: (closest.min + closest.max) / 2,
+      level: closest.level,
+      min: closest.min,
+      max: closest.max,
+    };
+  }
 
   /**
    * Provides fallback PGA estimates for regions when tile data is unavailable
@@ -493,10 +490,7 @@
             const [r, g, b] = imageData.data;
 
             // Check for transparent or white pixels (ocean/void)
-            if (
-              imageData.data[3] === 0 ||
-              (r > 240 && g > 240 && b > 240)
-            ) {
+            if (imageData.data[3] === 0 || (r > 240 && g > 240 && b > 240)) {
               resolve(null);
               return;
             }
@@ -1514,9 +1508,32 @@
       }
 
       const buildingType = document.getElementById("buildingType").value;
-      const stories =
-        parseInt(document.getElementById("buildingStories").value) || 1;
+      const storiesInputRaw = document.getElementById("buildingStories").value;
+      const storiesInput = storiesInputRaw.trim();
+
+      // Empty check
+      if (!storiesInput) {
+        riskResult.innerHTML = "⚠️ Please enter number of stories.";
+        riskResult.style.color = "orange";
+        return;
+      }
+
+      // Convert
+      const stories = Number(storiesInput);
+
+      // Strict validation
+      if (!Number.isInteger(stories) || stories <= 0) {
+        riskResult.innerHTML =
+          "⚠️ Number of stories must be a positive whole number.";
+        riskResult.style.color = "orange";
+        return;
+      }
       const propertyType = propertyTypeSelect ? propertyTypeSelect.value : "";
+      if (!propertyType) {
+        riskResult.innerHTML = "⚠️ Please select a property type.";
+        riskResult.style.color = "orange";
+        return;
+      }
       const seismicValue = seismicAssessmentDone
         ? seismicAssessmentDone.value
         : "";
@@ -1548,12 +1565,15 @@
       const hasGeotechnicalReport = selectedDocuments.includes(
         "Geotechnical report",
       );
+      const hasFloorPlan = selectedDocuments.includes(
+        "Floor plan showing structural columns and walls location",
+      );
 
       const hasPeerReviewDocuments =
         hasStructuralDesignReport &&
         (hasArchitecturalDrawings || hasStructuralAsBuilt || hasDigitalModel);
 
-      const hasTier1Documents = hasStructuralAsBuilt || hasDigitalModel;
+      const hasTier1Documents = hasStructuralAsBuilt || hasFloorPlan;
       const hasTier3Documents =
         hasArchitecturalDrawings &&
         hasStructuralAsBuilt &&
@@ -1565,7 +1585,7 @@
       let logicMatched = false;
 
       // Condition 1: TIER 3
-      if (isValidForDocs && hasTier3Documents) {
+      if (isValidForDocs && hasTier3Documents && buildingType === "RC") {
         let refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4";
 
         if (buildingType === "RC") {
