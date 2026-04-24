@@ -2,14 +2,14 @@
  * Global Seismic Hazard Map - Professional Version with Fault Line Analysis
  * GEM Foundation v2023.1
  * Handles map visualization, location search, seismic hazard data, and fault distance calculation
- * 
+ *
  * Refactored for maintainability while preserving all original logic and functionality.
  */
 
 (function () {
   "use strict";
 
-  // CONFIGURATION  
+  // CONFIGURATION
   const CONFIG = {
     // Map Viewport
     defaultCenter: [20, 0],
@@ -17,7 +17,9 @@
     minZoom: 2,
     maxZoom: 6,
     maxBounds: [
-      [-60, -180],[84, 180],],
+      [-60, -180],
+      [84, 180],
+    ],
 
     // Tile Settings
     tilePath: "tiles/{z}/{x}/{y}.png",
@@ -73,8 +75,8 @@
     LINE_DISPLAY_DURATION: 8000,
   };
 
-  //GLOBAL STATE 
-  
+  //GLOBAL STATE
+
   // Map layers
   let map = null;
   let currentMarker = null;
@@ -104,8 +106,7 @@
   // Current analysis results
   let currentFaultInfo = null;
 
-  // UTILITY FUNCTIONS 
-  
+  // UTILITY FUNCTIONS
   /**
    * Formats coordinates as degrees with cardinal directions
    * @param {number} lat - Latitude
@@ -205,8 +206,8 @@
     checkboxes.forEach((cb) => (cb.disabled = isDisabled));
   }
 
-  //  FAULT ANALYSIS FUNCTIONS 
-  
+  //  FAULT ANALYSIS FUNCTIONS
+
   /**
    * Extracts coordinates from GeoJSON geometry (handles LineString and MultiLineString)
    * @param {Object} geometry - GeoJSON geometry object
@@ -369,8 +370,8 @@
     }, FAULT_THRESHOLDS.LINE_DISPLAY_DURATION);
   }
 
-  //  HAZARD FUNCTIONS 
-  
+  //  HAZARD FUNCTIONS
+
   /**
    * Finds the closest hazard level by comparing RGB values with tolerance
    * @param {number} r - Red channel value
@@ -379,28 +380,30 @@
    * @returns {Object} PGA value and hazard level
    */
   function findClosestHazard(r, g, b) {
-    for (const hazard of PGA_LOOKUP_TABLE) {
-      const [cr, cg, cb] = hazard.color;
+  let minDist = Infinity;
+  let closest = null;
 
-      if (
-        Math.abs(r - cr) < 10 &&
-        Math.abs(g - cg) < 10 &&
-        Math.abs(b - cb) < 10
-      ) {
-        return {
-          pga: (hazard.min + hazard.max) / 2,
-          level: hazard.level,
-          min: hazard.min,
-          max: hazard.max,
-        };
-      }
+  for (const hazard of PGA_LOOKUP_TABLE) {
+    const [cr, cg, cb] = hazard.color;
+
+    const dist =
+      (r - cr) ** 2 +
+      (g - cg) ** 2 +
+      (b - cb) ** 2;
+
+    if (dist < minDist) {
+      minDist = dist;
+      closest = hazard;
     }
-
-    return {
-      pga: 0.025,
-      level: "Low-Moderate",
-    };
   }
+
+  return {
+    pga: (closest.min + closest.max) / 2,
+    level: closest.level,
+    min: closest.min,
+    max: closest.max,
+  };
+}
 
   /**
    * Provides fallback PGA estimates for regions when tile data is unavailable
@@ -454,7 +457,7 @@
   async function getHazardFromRaster(lat, lng) {
     return new Promise((resolve) => {
       try {
-        const currentZoom = Math.min(map.getZoom(), CONFIG.maxZoom);
+        const currentZoom = CONFIG.maxZoom; // ALWAYS sample at native tile zoom (6)
         const point = map.project([lat, lng], currentZoom);
         const tileSize = 256;
         const tileX = Math.floor(point.x / tileSize);
@@ -480,10 +483,11 @@
             canvas.width = tileSize;
             canvas.height = tileSize;
             const ctx = canvas.getContext("2d");
+            ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0);
 
-            const pixelX = Math.floor(point.x % tileSize);
-            const pixelY = Math.floor(point.y % tileSize);
+            const pixelX = Math.floor(point.x) - tileX * tileSize;
+            const pixelY = Math.floor(point.y) - tileY * tileSize;
 
             const imageData = ctx.getImageData(pixelX, pixelY, 1, 1);
             const [r, g, b] = imageData.data;
@@ -491,24 +495,13 @@
             // Check for transparent or white pixels (ocean/void)
             if (
               imageData.data[3] === 0 ||
-              (r === 255 && g === 255 && b === 255)
+              (r > 240 && g > 240 && b > 240)
             ) {
               resolve(null);
               return;
             }
 
-            const hazardInfo = RGB_TO_HAZARD.get(`${r},${g},${b}`);
-
-            if (hazardInfo) {
-              resolve({
-                pga: (hazardInfo.min + hazardInfo.max) / 2,
-                level: hazardInfo.level,
-                min: hazardInfo.min,
-                max: hazardInfo.max,
-              });
-            } else {
-              resolve(findClosestHazard(r, g, b));
-            }
+            resolve(findClosestHazard(r, g, b));
           } catch (err) {
             console.error("Error reading tile pixel:", err);
             resolve(getHazardEstimate(lat, lng));
@@ -533,8 +526,8 @@
     });
   }
 
-  //  COUNTRY DATA FUNCTIONS 
-  
+  //  COUNTRY DATA FUNCTIONS
+
   /**
    * Loads country GeoJSON from remote repository and computes centroid coordinates
    * @returns {Promise<boolean>} Success status
@@ -638,8 +631,8 @@
       });
   }
 
-  //  MAP LAYER FUNCTIONS 
-  
+  //  MAP LAYER FUNCTIONS
+
   /**
    * Adds country boundary polygons to the map with tooltips
    */
@@ -828,8 +821,8 @@
     if (currentMarker) currentMarker.setZIndexOffset(1000);
   }
 
-  //  MAP INITIALIZATION 
-  
+  //  MAP INITIALIZATION
+
   /**
    * Adds custom zoom controls to replace default Leaflet zoom
    */
@@ -1005,8 +998,8 @@
     updateStatus("Ready", true);
   }
 
-  //  LOCATION & SEARCH FUNCTIONS 
-  
+  //  LOCATION & SEARCH FUNCTIONS
+
   /**
    * Searches for locations using Nominatim geocoding API
    * @param {string} query - Search query (city, country, address)
@@ -1130,7 +1123,13 @@
    * @param {string} country - Country name (optional)
    * @param {string} fullAddress - Full address (optional)
    */
-  async function selectLocation(name, lat, lng, country = "", fullAddress = "") {
+  async function selectLocation(
+    name,
+    lat,
+    lng,
+    country = "",
+    fullAddress = "",
+  ) {
     // Remove existing marker
     if (currentMarker) {
       map.removeLayer(currentMarker);
@@ -1147,7 +1146,7 @@
 
     updateStatus("Fetching hazard data...", false);
     const hazard = await getHazardFromRaster(lat, lng);
-    
+
     updateStatus("Ready", true);
 
     const faultInfo = calculateDistanceToNearestFault(lat, lng);
@@ -1194,8 +1193,8 @@
     fixLayerOrder();
   }
 
-  //  SEARCH UI HANDLERS 
-  
+  //  SEARCH UI HANDLERS
+
   /**
    * Sets up the location search input with autocomplete
    */
@@ -1377,8 +1376,8 @@
     });
   }
 
-  //  RISK ANALYSIS UI 
-  
+  //  RISK ANALYSIS UI
+
   /**
    * Sets up the risk analysis panel with dynamic document section visibility
    */
@@ -1388,8 +1387,12 @@
 
     const propertyTypeSelect = document.getElementById("propertyType");
     const documentsSection = document.getElementById("documentsSection");
-    const leaseRenewalQuestion = document.getElementById("leaseRenewalQuestion");
-    const seismicAssessmentDone = document.getElementById("seismicAssessmentDone");
+    const leaseRenewalQuestion = document.getElementById(
+      "leaseRenewalQuestion",
+    );
+    const seismicAssessmentDone = document.getElementById(
+      "seismicAssessmentDone",
+    );
 
     /**
      * Updates document section visibility based on property type and assessment status
@@ -1530,59 +1533,78 @@
       const seismicityDisplay = getSeismicityDisplay(pga);
       const selectedDocuments = getSelectedDocuments();
 
-      const hasStructuralDesignReport = selectedDocuments.includes("Structural design report");
-      const hasArchitecturalDrawings = selectedDocuments.includes("Architectural drawings");
-      const hasStructuralAsBuilt = selectedDocuments.includes("Structural as-built drawings");
-      const hasDigitalModel = selectedDocuments.includes("Digital structural model (ETABS or equivalent)");
-      const hasGeotechnicalReport = selectedDocuments.includes("Geotechnical report");
-      
-      const hasPeerReviewDocuments = hasStructuralDesignReport && 
-          (hasArchitecturalDrawings || hasStructuralAsBuilt || hasDigitalModel);
-      
-      const hasTier1Documents = hasStructuralAsBuilt || hasDigitalModel;
-      
-      const hasTier3Documents = hasArchitecturalDrawings && hasStructuralAsBuilt && hasGeotechnicalReport;
+      const hasStructuralDesignReport = selectedDocuments.includes(
+        "Structural design report",
+      );
+      const hasArchitecturalDrawings = selectedDocuments.includes(
+        "Architectural drawings",
+      );
+      const hasStructuralAsBuilt = selectedDocuments.includes(
+        "Structural as-built drawings",
+      );
+      const hasDigitalModel = selectedDocuments.includes(
+        "Digital structural model (ETABS or equivalent)",
+      );
+      const hasGeotechnicalReport = selectedDocuments.includes(
+        "Geotechnical report",
+      );
 
+      const hasPeerReviewDocuments =
+        hasStructuralDesignReport &&
+        (hasArchitecturalDrawings || hasStructuralAsBuilt || hasDigitalModel);
+
+      const hasTier1Documents = hasStructuralAsBuilt || hasDigitalModel;
+      const hasTier3Documents =
+        hasArchitecturalDrawings &&
+        hasStructuralAsBuilt &&
+        hasGeotechnicalReport;
       const isValidForDocs = isValidPropertyType(propertyType, seismicValue);
 
       let recommendation = "";
       let recommendationType = "";
       let logicMatched = false;
 
-      // Condition 1: TIER 3 - Highest level
+      // Condition 1: TIER 3
       if (isValidForDocs && hasTier3Documents) {
         let refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4";
-        
+
         if (buildingType === "RC") {
           if (pga >= 0.03 && pga <= 0.08 && stories >= 13) {
-            refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4 & Moderate seismicity";
+            refinedRecommendation =
+              "Tier 3 ASCE41-23 – See Note 4 & Moderate seismicity";
           } else if (pga > 0.08 && stories >= 9) {
-            refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4 & High seismicity";
+            refinedRecommendation =
+              "Tier 3 ASCE41-23 – See Note 4 & High seismicity";
           } else {
-            refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4 & Insufficient documents";
+            refinedRecommendation =
+              "Tier 3 ASCE41-23 – See Note 4 & Insufficient documents";
           }
         }
-        
         recommendation = refinedRecommendation;
         recommendationType = "tier3";
         logicMatched = true;
       }
+
       // Condition 2: TIER 1
       else if (isValidForDocs && hasTier1Documents) {
         let refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3";
-        
+
         if (buildingType === "URM") {
-          refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3 & URM/Wood construction";
+          refinedRecommendation =
+            "Tier 1 ASCE41-23 – See Note 3 & URM/Wood construction";
         } else if (buildingType === "RC") {
           if (pga >= 0.01 && pga < 0.03) {
-            refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3 & Low seismicity";
+            refinedRecommendation =
+              "Tier 1 ASCE41-23 – See Note 3 & Low seismicity";
           } else if (pga >= 0.03 && pga <= 0.08 && stories <= 12) {
-            refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3 & Moderate seismicity";
+            refinedRecommendation =
+              "Tier 1 ASCE41-23 – See Note 3 & Moderate seismicity";
           } else if (pga > 0.08 && stories <= 8) {
-            refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3 & High seismicity";
+            refinedRecommendation =
+              "Tier 1 ASCE41-23 – See Note 3 & High seismicity";
           }
         }
-        
+
         recommendation = refinedRecommendation;
         recommendationType = "tier1";
         logicMatched = true;
@@ -1594,7 +1616,11 @@
         logicMatched = true;
       }
       // Condition 4: Lease Renewal with No assessment + Peer Review
-      else if (propertyType === "Lease Renewal" && seismicValue === "no" && hasPeerReviewDocuments) {
+      else if (
+        propertyType === "Lease Renewal" &&
+        seismicValue === "no" &&
+        hasPeerReviewDocuments
+      ) {
         recommendation = "Peer Review – See Note 2";
         recommendationType = "tier2";
         logicMatched = true;
@@ -1606,36 +1632,58 @@
         logicMatched = true;
       }
       // Condition 6: Building Acquisition + Peer Review
-      else if (propertyType === "Building Acquisition" && hasPeerReviewDocuments) {
+      else if (
+        propertyType === "Building Acquisition" &&
+        hasPeerReviewDocuments
+      ) {
         recommendation = "Peer Review – See Note 2";
         recommendationType = "tier2";
         logicMatched = true;
       }
       // Condition 7: New Lease + Only Structural report
-      else if (propertyType === "New Lease" && hasStructuralDesignReport && !hasPeerReviewDocuments) {
+      else if (
+        propertyType === "New Lease" &&
+        hasStructuralDesignReport &&
+        !hasPeerReviewDocuments
+      ) {
         recommendation = "High-Level Review – See Note 1";
         recommendationType = "tier1";
         logicMatched = true;
       }
       // Condition 8: Lease Renewal + No assessment + Only Structural report
-      else if (propertyType === "Lease Renewal" && seismicValue === "no" && hasStructuralDesignReport && !hasPeerReviewDocuments) {
+      else if (
+        propertyType === "Lease Renewal" &&
+        seismicValue === "no" &&
+        hasStructuralDesignReport &&
+        !hasPeerReviewDocuments
+      ) {
         recommendation = "High-Level Review – See Note 1";
         recommendationType = "tier1";
         logicMatched = true;
       }
       // Condition 9: Building Acquisition + Only Structural report
-      else if (propertyType === "Building Acquisition" && hasStructuralDesignReport && !hasPeerReviewDocuments) {
+      else if (
+        propertyType === "Building Acquisition" &&
+        hasStructuralDesignReport &&
+        !hasPeerReviewDocuments
+      ) {
         recommendation = "High-Level Review – See Note 1";
         recommendationType = "tier1";
         logicMatched = true;
       }
 
       if (!logicMatched) {
-        recommendation = "Available documentation is not sufficient. Please see Notes Sheet to see the list of required documentation for each type of analysis.";
+        recommendation =
+          "Available documentation is not sufficient. Please see Notes Sheet to see the list of required documentation for each type of analysis.";
         recommendationType = "tier2";
       }
 
-      const color = recommendationType === "tier3" ? "#e74c3c" : recommendationType === "tier2" ? "#f39c12" : "#2ecc71";
+      const color =
+        recommendationType === "tier3"
+          ? "#e74c3c"
+          : recommendationType === "tier2"
+            ? "#f39c12"
+            : "#2ecc71";
 
       if (riskResult) {
         riskResult.innerHTML = `
@@ -1715,8 +1763,8 @@
     }
   }
 
-  //  EVENT HANDLERS 
-  
+  //  EVENT HANDLERS
+
   /**
    * Sets up all map and UI event listeners
    */
@@ -1905,7 +1953,7 @@
     // Map zoom events
     map.on("zoomend", handleZoomForFaults);
     map.on("zoomend", handleLegendVisibility);
-    
+
     // Map click handler
     map.on("click", async (e) => {
       const { lat, lng } = e.latlng;
@@ -1922,8 +1970,8 @@
     });
   }
 
-  //  INITIALIZATION 
-  
+  //  INITIALIZATION
+
   /**
    * Initializes the application
    */
