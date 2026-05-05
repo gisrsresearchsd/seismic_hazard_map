@@ -9,17 +9,16 @@
 (function () {
   "use strict";
 
-  // CONFIGURATION
+  // SECTION 1: CONFIGURATION & CONSTANTS
+
+  // Map Configuration
   const CONFIG = {
     // Map Viewport
     defaultCenter: [20, 0],
     defaultZoom: 2,
     minZoom: 2,
     maxZoom: 6,
-    maxBounds: [
-      [-60, -180],
-      [84, 180],
-    ],
+    maxBounds: [[-60, -180],[84, 180]],
 
     // Tile Settings
     tilePath: "tiles/{z}/{x}/{y}.png",
@@ -37,7 +36,7 @@
     faultZoomThreshold: 5,
   };
 
-  // PGA Color Lookup Table - Maps RGB colors to PGA values and hazard levels
+  // PGA Color Lookup Table
   const PGA_LOOKUP_TABLE = [
     { color: [255, 255, 255], min: 0.0, max: 0.01, level: "Very Low" },
     { color: [215, 227, 238], min: 0.01, max: 0.02, level: "Low" },
@@ -52,7 +51,7 @@
     { color: [255, 76, 0], min: 0.9, max: 1.5, level: "Extreme" },
   ];
 
-  // Build RGB → Hazard lookup map for quick pixel-to-hazard conversion
+  // Build RGB → Hazard lookup map
   const RGB_TO_HAZARD = new Map();
   PGA_LOOKUP_TABLE.forEach((item) => {
     const rgbKey = item.color.join(",");
@@ -66,7 +65,7 @@
     });
   });
 
-  // Fault distance thresholds for risk assessment
+  // Fault distance thresholds
   const FAULT_THRESHOLDS = {
     CRITICAL: 10,
     HIGH: 30,
@@ -75,7 +74,7 @@
     LINE_DISPLAY_DURATION: 8000,
   };
 
-  //GLOBAL STATE
+  // SECTION 2: GLOBAL STATE VARIABLES
 
   // Map layers
   let map = null;
@@ -106,13 +105,16 @@
   // Current analysis results
   let currentFaultInfo = null;
 
-  // UTILITY FUNCTIONS
+
+  // SECTION 3: UTILITY FUNCTIONS
+
   /**
    * Formats coordinates as degrees with cardinal directions
    * @param {number} lat - Latitude
    * @param {number} lng - Longitude
    * @returns {string} Formatted coordinate string (e.g., "40.7128° N, 74.0060° W")
    */
+
   function formatCoordinates(lat, lng) {
     const latDir = lat >= 0 ? "N" : "S";
     const lngDir = lng >= 0 ? "E" : "W";
@@ -204,170 +206,6 @@
       '.documents-option input[type="checkbox"]',
     );
     checkboxes.forEach((cb) => (cb.disabled = isDisabled));
-  }
-
-  //  FAULT ANALYSIS FUNCTIONS
-
-  /**
-   * Extracts coordinates from GeoJSON geometry (handles LineString and MultiLineString)
-   * @param {Object} geometry - GeoJSON geometry object
-   * @returns {Array|null} Array of coordinates or null if invalid
-   */
-  function extractFaultCoordinates(geometry) {
-    if (!geometry) return null;
-
-    if (geometry.type === "LineString") {
-      return geometry.coordinates;
-    }
-
-    if (geometry.type === "MultiLineString") {
-      let longestSegment = null;
-      let maxLength = 0;
-
-      for (const line of geometry.coordinates) {
-        if (line.length > maxLength) {
-          maxLength = line.length;
-          longestSegment = line;
-        }
-      }
-      return longestSegment;
-    }
-
-    return null;
-  }
-
-  /**
-   * Returns a human-readable risk message based on distance to nearest fault
-   * @param {number} distanceKm - Distance to nearest fault in kilometers
-   * @returns {string} Risk assessment message
-   */
-  function getFaultDistanceMessage(distanceKm) {
-    if (distanceKm < FAULT_THRESHOLDS.CRITICAL) {
-      return "⚠️ CRITICAL: Very close to active fault! Special seismic design required.";
-    }
-    if (distanceKm < FAULT_THRESHOLDS.HIGH) {
-      return "⚠️ HIGH: Within 30km of active fault. Enhanced design recommended.";
-    }
-    if (distanceKm < FAULT_THRESHOLDS.MODERATE) {
-      return "⚠️ MODERATE: Within 60km of fault. Standard seismic design advised.";
-    }
-    if (distanceKm < FAULT_THRESHOLDS.LOW) {
-      return "✓ LOW: Beyond 60km from major faults. Regular seismic considerations apply.";
-    }
-    return "✓ VERY LOW: Far from known active faults.";
-  }
-
-  /**
-   * Calculates distance from a point to the nearest fault line using Turf.js
-   * @param {number} lat - Latitude of selected point
-   * @param {number} lng - Longitude of selected point
-   * @returns {Object} Distance, fault name, fault type, nearest point, and message
-   */
-  function calculateDistanceToNearestFault(lat, lng) {
-    if (!faultLayer || faultLoading || !map.hasLayer(faultLayer)) {
-      return {
-        distance: null,
-        nearestFault: null,
-        faultType: null,
-        nearestPoint: null,
-        message: "Fault layer not active or not loaded",
-      };
-    }
-
-    let minDistance = Infinity;
-    let nearestFaultName = null;
-    let nearestFaultType = null;
-    let nearestPoint = null;
-
-    const clickPoint = turf.point([lng, lat]);
-
-    faultLayer.eachLayer((layer) => {
-      if (!layer.feature?.geometry) return;
-
-      try {
-        const coordinates = extractFaultCoordinates(layer.feature.geometry);
-        if (!coordinates) return;
-
-        const faultLine = turf.lineString(coordinates);
-        const distance = turf.pointToLineDistance(clickPoint, faultLine, {
-          units: "kilometers",
-        });
-
-        if (distance < minDistance) {
-          minDistance = distance;
-          const props = layer.feature.properties || {};
-
-          nearestFaultName =
-            props.name || props.Name || props.fault_name || "Unnamed Fault";
-          nearestFaultType = props.slip_type || props.slipType || "Unknown";
-
-          const nearest = turf.nearestPointOnLine(faultLine, clickPoint);
-          nearestPoint = nearest.geometry.coordinates;
-        }
-      } catch (err) {
-        console.warn("Error calculating distance for fault:", err);
-      }
-    });
-
-    if (minDistance === Infinity) {
-      return {
-        distance: null,
-        nearestFault: null,
-        faultType: null,
-        nearestPoint: null,
-        message: "No faults found in this region",
-      };
-    }
-
-    return {
-      distance: minDistance,
-      nearestFault: nearestFaultName,
-      faultType: nearestFaultType,
-      nearestPoint: nearestPoint,
-      message: getFaultDistanceMessage(minDistance),
-    };
-  }
-
-  /**
-   * Draws a temporary dashed line from click point to nearest fault point
-   * @param {Array} clickLngLat - Click coordinates [lng, lat]
-   * @param {Array} nearestPoint - Nearest fault point coordinates [lng, lat]
-   * @param {string} faultName - Name of the nearest fault
-   */
-  function showFaultDistanceLine(clickLngLat, nearestPoint, faultName) {
-    if (faultDistanceLine) map.removeLayer(faultDistanceLine);
-    if (nearestFaultMarker) map.removeLayer(nearestFaultMarker);
-
-    if (!nearestPoint) return;
-
-    const latlngs = [
-      [clickLngLat[1], clickLngLat[0]],
-      [nearestPoint[1], nearestPoint[0]],
-    ];
-
-    faultDistanceLine = L.polyline(latlngs, {
-      color: "#005187",
-      weight: 3,
-      dashArray: "8, 6",
-      opacity: 0.8,
-      className: "animated-line",
-    }).addTo(map);
-
-    nearestFaultMarker = L.circleMarker([nearestPoint[1], nearestPoint[0]], {
-      radius: 6,
-      color: "#005187",
-      fillColor: "#ff0000",
-      fillOpacity: 0.8,
-    })
-      .addTo(map)
-      .bindTooltip(`Nearest point on ${faultName}`, { sticky: true });
-
-    setTimeout(() => {
-      if (faultDistanceLine) map.removeLayer(faultDistanceLine);
-      if (nearestFaultMarker) map.removeLayer(nearestFaultMarker);
-      faultDistanceLine = null;
-      nearestFaultMarker = null;
-    }, FAULT_THRESHOLDS.LINE_DISPLAY_DURATION);
   }
 
   //  HAZARD FUNCTIONS
@@ -520,8 +358,171 @@
     });
   }
 
-  //  COUNTRY DATA FUNCTIONS
+  // SECTION 5: FAULT ANALYSIS FUNCTIONS
+  /**
+   * Extracts coordinates from GeoJSON geometry (handles LineString and MultiLineString)
+   * @param {Object} geometry - GeoJSON geometry object
+   * @returns {Array|null} Array of coordinates or null if invalid
+   */
+  function extractFaultCoordinates(geometry) {
+    if (!geometry) return null;
 
+    if (geometry.type === "LineString") {
+      return geometry.coordinates;
+    }
+
+    if (geometry.type === "MultiLineString") {
+      let longestSegment = null;
+      let maxLength = 0;
+
+      for (const line of geometry.coordinates) {
+        if (line.length > maxLength) {
+          maxLength = line.length;
+          longestSegment = line;
+        }
+      }
+      return longestSegment;
+    }
+
+    return null;
+  }
+
+  /**
+   * Returns a human-readable risk message based on distance to nearest fault
+   * @param {number} distanceKm - Distance to nearest fault in kilometers
+   * @returns {string} Risk assessment message
+   */
+  function getFaultDistanceMessage(distanceKm) {
+    if (distanceKm < FAULT_THRESHOLDS.CRITICAL) {
+      return "🔴 CRITICAL: Very close to active fault! Special seismic design required.";
+    }
+    if (distanceKm < FAULT_THRESHOLDS.HIGH) {
+      return "🟠 HIGH: Within 30km of active fault. Enhanced design recommended.";
+    }
+    if (distanceKm < FAULT_THRESHOLDS.MODERATE) {
+      return "🟡 MODERATE: Within 60km of fault. Standard seismic design advised.";
+    }
+    if (distanceKm < FAULT_THRESHOLDS.LOW) {
+      return "🟢 LOW: Beyond 60km from major faults. Regular seismic considerations apply.";
+    }
+    return "✅ VERY LOW: Far from known active faults.";
+  }
+
+  /**
+   * Calculates distance from a point to the nearest fault line using Turf.js
+   * @param {number} lat - Latitude of selected point
+   * @param {number} lng - Longitude of selected point
+   * @returns {Object} Distance, fault name, fault type, nearest point, and message
+   */
+  function calculateDistanceToNearestFault(lat, lng) {
+    if (!faultLayer || faultLoading || !map.hasLayer(faultLayer)) {
+      return {
+        distance: null,
+        nearestFault: null,
+        faultType: null,
+        nearestPoint: null,
+        message: "Fault layer not active or not loaded",
+      };
+    }
+
+    let minDistance = Infinity;
+    let nearestFaultName = null;
+    let nearestFaultType = null;
+    let nearestPoint = null;
+
+    const clickPoint = turf.point([lng, lat]);
+
+    faultLayer.eachLayer((layer) => {
+      if (!layer.feature?.geometry) return;
+
+      try {
+        const coordinates = extractFaultCoordinates(layer.feature.geometry);
+        if (!coordinates) return;
+
+        const faultLine = turf.lineString(coordinates);
+        const distance = turf.pointToLineDistance(clickPoint, faultLine, {
+          units: "kilometers",
+        });
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          const props = layer.feature.properties || {};
+
+          nearestFaultName =
+            props.name || props.Name || props.fault_name || "Unnamed Fault";
+          nearestFaultType = props.slip_type || props.slipType || "Unknown";
+
+          const nearest = turf.nearestPointOnLine(faultLine, clickPoint);
+          nearestPoint = nearest.geometry.coordinates;
+        }
+      } catch (err) {
+        console.warn("Error calculating distance for fault:", err);
+      }
+    });
+
+    if (minDistance === Infinity) {
+      return {
+        distance: null,
+        nearestFault: null,
+        faultType: null,
+        nearestPoint: null,
+        message: "No faults found in this region",
+      };
+    }
+
+    return {
+      distance: minDistance,
+      nearestFault: nearestFaultName,
+      faultType: nearestFaultType,
+      nearestPoint: nearestPoint,
+      message: getFaultDistanceMessage(minDistance),
+    };
+  }
+
+  /**
+   * Draws a temporary dashed line from click point to nearest fault point
+   * @param {Array} clickLngLat - Click coordinates [lng, lat]
+   * @param {Array} nearestPoint - Nearest fault point coordinates [lng, lat]
+   * @param {string} faultName - Name of the nearest fault
+   */
+  function showFaultDistanceLine(clickLngLat, nearestPoint, faultName) {
+    if (faultDistanceLine) map.removeLayer(faultDistanceLine);
+    if (nearestFaultMarker) map.removeLayer(nearestFaultMarker);
+
+    if (!nearestPoint) return;
+
+    const latlngs = [
+      [clickLngLat[1], clickLngLat[0]],
+      [nearestPoint[1], nearestPoint[0]],
+    ];
+
+    faultDistanceLine = L.polyline(latlngs, {
+      color: "#005187",
+      weight: 3,
+      dashArray: "8, 6",
+      opacity: 0.8,
+      className: "animated-line",
+    }).addTo(map);
+
+    nearestFaultMarker = L.circleMarker([nearestPoint[1], nearestPoint[0]], {
+      radius: 6,
+      color: "#005187",
+      fillColor: "#ff0000",
+      fillOpacity: 0.8,
+    })
+      .addTo(map)
+      .bindTooltip(`Nearest point on ${faultName}`, { sticky: true });
+
+    setTimeout(() => {
+      if (faultDistanceLine) map.removeLayer(faultDistanceLine);
+      if (nearestFaultMarker) map.removeLayer(nearestFaultMarker);
+      faultDistanceLine = null;
+      nearestFaultMarker = null;
+    }, FAULT_THRESHOLDS.LINE_DISPLAY_DURATION);
+  }
+  
+
+  //  COUNTRY DATA FUNCTIONS
   /**
    * Loads country GeoJSON from remote repository and computes centroid coordinates
    * @returns {Promise<boolean>} Success status
@@ -1490,7 +1491,7 @@
       if (isNaN(pga)) {
         if (riskResult) {
           riskResult.innerHTML =
-            "⚠️ Your selected area PGA value is not available";
+            "⚠️ PGA value is less than 0.01g";
           riskResult.style.color = "orange";
         }
         setFormDisabled(true);
@@ -1501,7 +1502,7 @@
       if (pga < 0.01) {
         if (riskResult) {
           riskResult.innerHTML =
-            "ℹ️ Seismic acceleration is less than 0.01g (Very low seismic risk)";
+            "⚠️ PGA value is less than 0.01g";
           riskResult.style.color = "#3498db";
         }
         return;
@@ -1510,6 +1511,21 @@
       const buildingType = document.getElementById("buildingType").value;
       const storiesInputRaw = document.getElementById("buildingStories").value;
       const storiesInput = storiesInputRaw.trim();
+
+      const propertyType = propertyTypeSelect ? propertyTypeSelect.value : "";
+      if (!propertyType) {
+        riskResult.innerHTML = "⚠️ Please select a property type.";
+        riskResult.style.color = "orange";
+        return;
+      }
+
+      if (!buildingType) {
+        if (riskResult) {
+          riskResult.innerHTML = "⚠️ Please select a building type.";
+          riskResult.style.color = "orange";
+        }
+        return;
+      }
 
       // Empty check
       if (!storiesInput) {
@@ -1528,23 +1544,12 @@
         riskResult.style.color = "orange";
         return;
       }
-      const propertyType = propertyTypeSelect ? propertyTypeSelect.value : "";
-      if (!propertyType) {
-        riskResult.innerHTML = "⚠️ Please select a property type.";
-        riskResult.style.color = "orange";
-        return;
-      }
+      
       const seismicValue = seismicAssessmentDone
         ? seismicAssessmentDone.value
         : "";
 
-      if (!buildingType) {
-        if (riskResult) {
-          riskResult.innerHTML = "⚠️ Please select a building type.";
-          riskResult.style.color = "orange";
-        }
-        return;
-      }
+      
 
       const seismicityCategory = getSeismicityCategory(pga);
       const seismicityDisplay = getSeismicityDisplay(pga);
@@ -1569,128 +1574,155 @@
         "Floor plan showing structural columns and walls location",
       );
 
-      const hasPeerReviewDocuments =
-        hasStructuralDesignReport &&
-        (hasArchitecturalDrawings || hasStructuralAsBuilt || hasDigitalModel);
+      const hasPeerReviewDocuments =  hasStructuralDesignReport &&  hasArchitecturalDrawings &&  hasStructuralAsBuilt &&  hasDigitalModel;
+      const hasOnlyStructuralReport =  hasStructuralDesignReport &&  !hasArchitecturalDrawings &&  !hasStructuralAsBuilt &&  !hasDigitalModel &&  !hasGeotechnicalReport &&  !hasFloorPlan;
+      const hasTier3Documents = hasArchitecturalDrawings && hasStructuralAsBuilt && hasGeotechnicalReport;
+      const tier3DocCount =
+  (hasArchitecturalDrawings ? 1 : 0) +
+  (hasStructuralAsBuilt ? 1 : 0) +
+  (hasGeotechnicalReport ? 1 : 0);
+
+const isOnlyAsBuilt =
+  hasStructuralAsBuilt &&
+  !hasArchitecturalDrawings &&
+  !hasGeotechnicalReport;
+
+const hasAnyTier3Combo =
+  tier3DocCount >= 2 || 
+  (tier3DocCount === 1 && !isOnlyAsBuilt);
+
+  const tier1DocCount =
+  (hasStructuralAsBuilt ? 1 : 0) +
+  (hasFloorPlan ? 1 : 0);
+
+const hasStrongTier1Docs =
+  hasStructuralAsBuilt && hasFloorPlan;
+
+const hasWeakTier1Docs =
+  tier1DocCount === 1; // only one of them
 
       const hasTier1Documents = hasStructuralAsBuilt || hasFloorPlan;
-      const hasTier3Documents =
-        hasArchitecturalDrawings &&
-        hasStructuralAsBuilt &&
-        hasGeotechnicalReport;
+      
       const isValidForDocs = isValidPropertyType(propertyType, seismicValue);
 
       let recommendation = "";
       let recommendationType = "";
       let logicMatched = false;
 
-      // Condition 1: TIER 3
-      if (isValidForDocs && hasTier3Documents && buildingType === "RC") {
-        let refinedRecommendation = "Tier 3 ASCE41-23 – See Note 4";
-
-        if (buildingType === "RC") {
-          if (pga >= 0.03 && pga <= 0.08 && stories >= 13) {
-            refinedRecommendation =
-              "Tier 3 ASCE41-23 – See Note 4 & Moderate seismicity";
-          } else if (pga > 0.08 && stories >= 9) {
-            refinedRecommendation =
-              "Tier 3 ASCE41-23 – See Note 4 & High seismicity";
-          } else {
-            refinedRecommendation =
-              "Tier 3 ASCE41-23 – See Note 4 & Insufficient documents";
-          }
-        }
-        recommendation = refinedRecommendation;
-        recommendationType = "tier3";
-        logicMatched = true;
-      }
-
-      // Condition 2: TIER 1
-      else if (isValidForDocs && hasTier1Documents) {
-        let refinedRecommendation = "Tier 1 ASCE41-23 – See Note 3";
-
-        if (buildingType === "URM") {
-          refinedRecommendation =
-            "Tier 1 ASCE41-23 – See Note 3 & URM/Wood construction";
-        } else if (buildingType === "RC") {
-          if (pga >= 0.01 && pga < 0.03) {
-            refinedRecommendation =
-              "Tier 1 ASCE41-23 – See Note 3 & Low seismicity";
-          } else if (pga >= 0.03 && pga <= 0.08 && stories <= 12) {
-            refinedRecommendation =
-              "Tier 1 ASCE41-23 – See Note 3 & Moderate seismicity";
-          } else if (pga > 0.08 && stories <= 8) {
-            refinedRecommendation =
-              "Tier 1 ASCE41-23 – See Note 3 & High seismicity";
-          }
-        }
-
-        recommendation = refinedRecommendation;
-        recommendationType = "tier1";
-        logicMatched = true;
-      }
-      // Condition 3: New Lease + Peer Review
-      else if (propertyType === "New Lease" && hasPeerReviewDocuments) {
-        recommendation = "Peer Review – See Note 2";
-        recommendationType = "tier2";
-        logicMatched = true;
-      }
-      // Condition 4: Lease Renewal with No assessment + Peer Review
-      else if (
-        propertyType === "Lease Renewal" &&
-        seismicValue === "no" &&
-        hasPeerReviewDocuments
-      ) {
-        recommendation = "Peer Review – See Note 2";
-        recommendationType = "tier2";
-        logicMatched = true;
-      }
       // Condition 5: Lease Renewal with Yes assessment
-      else if (propertyType === "Lease Renewal" && seismicValue === "yes") {
+      if (propertyType === "Lease Renewal" && seismicValue === "yes") {
         recommendation = "Submit Document";
         recommendationType = "tier2";
         logicMatched = true;
       }
-      // Condition 6: Building Acquisition + Peer Review
-      else if (
-        propertyType === "Building Acquisition" &&
-        hasPeerReviewDocuments
-      ) {
-        recommendation = "Peer Review – See Note 2";
-        recommendationType = "tier2";
-        logicMatched = true;
-      }
-      // Condition 7: New Lease + Only Structural report
-      else if (
-        propertyType === "New Lease" &&
-        hasStructuralDesignReport &&
-        !hasPeerReviewDocuments
-      ) {
-        recommendation = "High-Level Review – See Note 1";
-        recommendationType = "tier1";
-        logicMatched = true;
-      }
-      // Condition 8: Lease Renewal + No assessment + Only Structural report
-      else if (
-        propertyType === "Lease Renewal" &&
-        seismicValue === "no" &&
-        hasStructuralDesignReport &&
-        !hasPeerReviewDocuments
-      ) {
-        recommendation = "High-Level Review – See Note 1";
-        recommendationType = "tier1";
-        logicMatched = true;
-      }
-      // Condition 9: Building Acquisition + Only Structural report
-      else if (
-        propertyType === "Building Acquisition" &&
-        hasStructuralDesignReport &&
-        !hasPeerReviewDocuments
-      ) {
-        recommendation = "High-Level Review – See Note 1";
-        recommendationType = "tier1";
-        logicMatched = true;
-      }
+
+      // ----------------------
+// STEP 2: PEER REVIEW
+// ----------------------
+else if (hasPeerReviewDocuments) {
+  recommendation = "Peer Review – See Note 2";
+  recommendationType = "tier2";
+  logicMatched = true;
+}
+
+// ----------------------
+// STEP 3: HIGH-LEVEL REVIEW
+// ----------------------
+else if (hasOnlyStructuralReport) {
+  recommendation = "High-Level Review – See Note 1";
+  recommendationType = "tier1";
+  logicMatched = true;
+}
+
+      // ----------------------
+// STEP 4: TIER 3 (UPDATED)
+// ----------------------
+else if (hasAnyTier3Combo) {
+
+  let baseRecommendation = "";
+  let note = "";
+
+  // Full documents → no warning
+  if (tier3DocCount === 3) {
+    note = "";
+  } 
+  // Partial documents → show warning
+  else {
+    note = " (Insufficient Document)";
+  }
+
+  // URM
+  if (buildingType === "URM" && pga > 0.01) {
+    baseRecommendation = "ASCE41 Tier 3 - See Note 4";
+  }
+
+  // RC
+  else if (buildingType === "RC") {
+
+    if (pga >= 0.03 && pga <= 0.08 && stories >= 13) {
+      baseRecommendation = "ASCE41 Tier 3 - See Note 4";
+    }
+
+    else if (pga > 0.08 && stories >= 9) {
+      baseRecommendation = "ASCE41 Tier 3 - See Note 4";
+    }
+
+    else {
+      baseRecommendation = "Insufficient Document";
+    }
+  }
+
+  // Final output
+  recommendation = baseRecommendation + note;
+  recommendationType = "tier3";
+  logicMatched = true;
+}
+
+      // ----------------------
+// STEP 5: TIER 1 (UPDATED)
+// ----------------------
+else if (hasTier1Documents) {
+
+  let baseRecommendation = "";
+  let note = "";
+
+  // Weak docs → add warning
+  if (hasWeakTier1Docs) {
+    note = " (Insufficient Document)";
+  }
+
+  // RC only (as per your logic)
+  if (buildingType === "RC") {
+
+    if (pga >= 0.01 && pga < 0.03) {
+      baseRecommendation = "ASCE41 Tier 1 - See Note 3";
+    }
+
+    else if (pga >= 0.03 && pga <= 0.08 && stories <= 12) {
+      baseRecommendation = "ASCE41 Tier 1 - See Note 3";
+    }
+
+    else if (pga > 0.08 && stories <= 9) {
+      baseRecommendation = "ASCE41 Tier 1 - See Note 3";
+    }
+
+    else {
+      baseRecommendation = "Insufficient Document";
+      note = "";
+    }
+  }
+
+  // URM fallback (optional but safer)
+  else if (buildingType === "URM") {
+    baseRecommendation = "ASCE41 Tier 1 - See Note 3";
+  }
+
+  recommendation = baseRecommendation + note;
+  recommendationType = "tier1";
+  logicMatched = true;
+}
+      
+      
 
       if (!logicMatched) {
         recommendation =
