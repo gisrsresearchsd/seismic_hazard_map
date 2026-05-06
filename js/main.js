@@ -11,20 +11,24 @@
 
   // SECTION 1: CONFIGURATION & CONSTANTS
 
-  // Map Configuration
+  // Map Settings
   const CONFIG = {
     // Map Viewport
     defaultCenter: [20, 0],
     defaultZoom: 2,
     minZoom: 2,
     maxZoom: 6,
-    maxBounds: [[-60, -180],[84, 180]],
+
+    maxBounds: [
+      [-60, -180],
+      [84, 180],
+    ],
 
     // Tile Settings
     tilePath: "tiles/{z}/{x}/{y}.png",
     hazardOpacity: 0.75,
 
-    // Animation
+    // Map Animation
     flyToZoom: 6,
     flyToDuration: 1.2,
 
@@ -104,6 +108,8 @@
 
   // Current analysis results
   let currentFaultInfo = null;
+
+  
 
 
   // SECTION 3: UTILITY FUNCTIONS
@@ -1465,9 +1471,9 @@
      * @returns {string} Display string
      */
     function getSeismicityDisplay(pga) {
-      if (pga >= 0.01 && pga < 0.03) return "Low (0.01g - 0.03g)";
-      if (pga >= 0.03 && pga <= 0.08) return "Moderate (0.03g - 0.08g)";
-      if (pga > 0.08) return "High (> 0.08g)";
+      if (pga >= 0.01 && pga < 0.03) return "Low (0.01g - < 0.03g)";
+      if (pga >= 0.03 && pga <0.08) return "Moderate (0.03g - < 0.08g)";
+      if (pga >= 0.08) return "High (&ge; 0.08g)";
       return "Unknown";
     }
 
