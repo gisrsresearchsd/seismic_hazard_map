@@ -1664,9 +1664,9 @@
 
         // RC
         else if (buildingType === "RC") {
-          if (pga >= 0.03 && pga <= 0.08 && stories >= 13) {
+          if (pga >= 0.03 && pga < 0.08 && stories >= 13) {
             baseRecommendation = "ASCE41 Tier 3 - See Note 4";
-          } else if (pga > 0.08 && stories >= 9) {
+          } else if (pga >= 0.08 && stories >= 9) {
             baseRecommendation = "ASCE41 Tier 3 - See Note 4";
           } else {
             baseRecommendation = "Insufficient Document";
@@ -1695,9 +1695,9 @@
         if (buildingType === "RC") {
           if (pga >= 0.01 && pga < 0.03) {
             baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-          } else if (pga >= 0.03 && pga <= 0.08 && stories <= 12) {
+          } else if (pga >= 0.03 && pga < 0.08 && stories <= 12) {
             baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-          } else if (pga > 0.08 && stories <= 9) {
+          } else if (pga >= 0.08 && stories <= 8) {
             baseRecommendation = "ASCE41 Tier 1 - See Note 3";
           } else {
             baseRecommendation = "Insufficient Document";
