@@ -109,9 +109,6 @@
   // Current analysis results
   let currentFaultInfo = null;
 
-  
-
-
   // SECTION 3: UTILITY FUNCTIONS
 
   /**
@@ -526,7 +523,6 @@
       nearestFaultMarker = null;
     }, FAULT_THRESHOLDS.LINE_DISPLAY_DURATION);
   }
-  
 
   //  COUNTRY DATA FUNCTIONS
   /**
@@ -1460,8 +1456,8 @@
      */
     function getSeismicityCategory(pga) {
       if (pga >= 0.01 && pga < 0.03) return "low";
-      if (pga >= 0.03 && pga <= 0.08) return "moderate";
-      if (pga > 0.08) return "high";
+      if (pga >= 0.03 && pga < 0.08) return "moderate";
+      if (pga >= 0.08) return "high";
       return null;
     }
 
@@ -1472,7 +1468,7 @@
      */
     function getSeismicityDisplay(pga) {
       if (pga >= 0.01 && pga < 0.03) return "Low (0.01g - < 0.03g)";
-      if (pga >= 0.03 && pga <0.08) return "Moderate (0.03g - < 0.08g)";
+      if (pga >= 0.03 && pga < 0.08) return "Moderate (0.03g - < 0.08g)";
       if (pga >= 0.08) return "High (&ge; 0.08g)";
       return "Unknown";
     }
@@ -1496,8 +1492,7 @@
 
       if (isNaN(pga)) {
         if (riskResult) {
-          riskResult.innerHTML =
-            "⚠️ PGA value is less than 0.01g";
+          riskResult.innerHTML = "⚠️ PGA value is less than 0.01g";
           riskResult.style.color = "orange";
         }
         setFormDisabled(true);
@@ -1507,8 +1502,7 @@
 
       if (pga < 0.01) {
         if (riskResult) {
-          riskResult.innerHTML =
-            "⚠️ PGA value is less than 0.01g";
+          riskResult.innerHTML = "⚠️ PGA value is less than 0.01g";
           riskResult.style.color = "#3498db";
         }
         return;
@@ -1550,12 +1544,10 @@
         riskResult.style.color = "orange";
         return;
       }
-      
+
       const seismicValue = seismicAssessmentDone
         ? seismicAssessmentDone.value
         : "";
-
-      
 
       const seismicityCategory = getSeismicityCategory(pga);
       const seismicityDisplay = getSeismicityDisplay(pga);
@@ -1580,35 +1572,44 @@
         "Floor plan showing structural columns and walls location",
       );
 
-      const hasPeerReviewDocuments =  hasStructuralDesignReport &&  hasArchitecturalDrawings &&  hasStructuralAsBuilt &&  hasDigitalModel;
-      const hasOnlyStructuralReport =  hasStructuralDesignReport &&  !hasArchitecturalDrawings &&  !hasStructuralAsBuilt &&  !hasDigitalModel &&  !hasGeotechnicalReport &&  !hasFloorPlan;
-      const hasTier3Documents = hasArchitecturalDrawings && hasStructuralAsBuilt && hasGeotechnicalReport;
+      const hasPeerReviewDocuments =
+        hasStructuralDesignReport &&
+        hasArchitecturalDrawings &&
+        hasStructuralAsBuilt &&
+        hasDigitalModel;
+      const hasOnlyStructuralReport =
+        hasStructuralDesignReport &&
+        !hasArchitecturalDrawings &&
+        !hasStructuralAsBuilt &&
+        !hasDigitalModel &&
+        !hasGeotechnicalReport &&
+        !hasFloorPlan;
+      const hasTier3Documents =
+        hasArchitecturalDrawings &&
+        hasStructuralAsBuilt &&
+        hasGeotechnicalReport;
       const tier3DocCount =
-  (hasArchitecturalDrawings ? 1 : 0) +
-  (hasStructuralAsBuilt ? 1 : 0) +
-  (hasGeotechnicalReport ? 1 : 0);
+        (hasArchitecturalDrawings ? 1 : 0) +
+        (hasStructuralAsBuilt ? 1 : 0) +
+        (hasGeotechnicalReport ? 1 : 0);
 
-const isOnlyAsBuilt =
-  hasStructuralAsBuilt &&
-  !hasArchitecturalDrawings &&
-  !hasGeotechnicalReport;
+      const isOnlyAsBuilt =
+        hasStructuralAsBuilt &&
+        !hasArchitecturalDrawings &&
+        !hasGeotechnicalReport;
 
-const hasAnyTier3Combo =
-  tier3DocCount >= 2 || 
-  (tier3DocCount === 1 && !isOnlyAsBuilt);
+      const hasAnyTier3Combo =
+        tier3DocCount >= 2 || (tier3DocCount === 1 && !isOnlyAsBuilt);
 
-  const tier1DocCount =
-  (hasStructuralAsBuilt ? 1 : 0) +
-  (hasFloorPlan ? 1 : 0);
+      const tier1DocCount =
+        (hasStructuralAsBuilt ? 1 : 0) + (hasFloorPlan ? 1 : 0);
 
-const hasStrongTier1Docs =
-  hasStructuralAsBuilt && hasFloorPlan;
+      const hasStrongTier1Docs = hasStructuralAsBuilt && hasFloorPlan;
 
-const hasWeakTier1Docs =
-  tier1DocCount === 1; // only one of them
+      const hasWeakTier1Docs = tier1DocCount === 1; // only one of them
 
       const hasTier1Documents = hasStructuralAsBuilt || hasFloorPlan;
-      
+
       const isValidForDocs = isValidPropertyType(propertyType, seismicValue);
 
       let recommendation = "";
@@ -1623,112 +1624,96 @@ const hasWeakTier1Docs =
       }
 
       // ----------------------
-// STEP 2: PEER REVIEW
-// ----------------------
-else if (hasPeerReviewDocuments) {
-  recommendation = "Peer Review – See Note 2";
-  recommendationType = "tier2";
-  logicMatched = true;
-}
-
-// ----------------------
-// STEP 3: HIGH-LEVEL REVIEW
-// ----------------------
-else if (hasOnlyStructuralReport) {
-  recommendation = "High-Level Review – See Note 1";
-  recommendationType = "tier1";
-  logicMatched = true;
-}
+      // STEP 2: PEER REVIEW
+      // ----------------------
+      else if (hasPeerReviewDocuments) {
+        recommendation = "Peer Review – See Note 2";
+        recommendationType = "tier2";
+        logicMatched = true;
+      }
 
       // ----------------------
-// STEP 4: TIER 3 (UPDATED)
-// ----------------------
-else if (hasAnyTier3Combo) {
-
-  let baseRecommendation = "";
-  let note = "";
-
-  // Full documents → no warning
-  if (tier3DocCount === 3) {
-    note = "";
-  } 
-  // Partial documents → show warning
-  else {
-    note = " (Insufficient Document)";
-  }
-
-  // URM
-  if (buildingType === "URM" && pga > 0.01) {
-    baseRecommendation = "ASCE41 Tier 3 - See Note 4";
-  }
-
-  // RC
-  else if (buildingType === "RC") {
-
-    if (pga >= 0.03 && pga <= 0.08 && stories >= 13) {
-      baseRecommendation = "ASCE41 Tier 3 - See Note 4";
-    }
-
-    else if (pga > 0.08 && stories >= 9) {
-      baseRecommendation = "ASCE41 Tier 3 - See Note 4";
-    }
-
-    else {
-      baseRecommendation = "Insufficient Document";
-    }
-  }
-
-  // Final output
-  recommendation = baseRecommendation + note;
-  recommendationType = "tier3";
-  logicMatched = true;
-}
+      // STEP 3: HIGH-LEVEL REVIEW
+      // ----------------------
+      else if (hasOnlyStructuralReport) {
+        recommendation = "High-Level Review – See Note 1";
+        recommendationType = "tier1";
+        logicMatched = true;
+      }
 
       // ----------------------
-// STEP 5: TIER 1 (UPDATED)
-// ----------------------
-else if (hasTier1Documents) {
+      // STEP 4: TIER 3 (UPDATED)
+      // ----------------------
+      else if (hasAnyTier3Combo) {
+        let baseRecommendation = "";
+        let note = "";
 
-  let baseRecommendation = "";
-  let note = "";
+        // Full documents → no warning
+        if (tier3DocCount === 3) {
+          note = "";
+        }
+        // Partial documents → show warning
+        else {
+          note = " (Insufficient Document)";
+        }
 
-  // Weak docs → add warning
-  if (hasWeakTier1Docs) {
-    note = " (Insufficient Document)";
-  }
+        // URM
+        if (buildingType === "URM" && pga > 0.01) {
+          baseRecommendation = "ASCE41 Tier 3 - See Note 4";
+        }
 
-  // RC only (as per your logic)
-  if (buildingType === "RC") {
+        // RC
+        else if (buildingType === "RC") {
+          if (pga >= 0.03 && pga <= 0.08 && stories >= 13) {
+            baseRecommendation = "ASCE41 Tier 3 - See Note 4";
+          } else if (pga > 0.08 && stories >= 9) {
+            baseRecommendation = "ASCE41 Tier 3 - See Note 4";
+          } else {
+            baseRecommendation = "Insufficient Document";
+          }
+        }
 
-    if (pga >= 0.01 && pga < 0.03) {
-      baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-    }
+        // Final output
+        recommendation = baseRecommendation + note;
+        recommendationType = "tier3";
+        logicMatched = true;
+      }
 
-    else if (pga >= 0.03 && pga <= 0.08 && stories <= 12) {
-      baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-    }
+      // ----------------------
+      // STEP 5: TIER 1 (UPDATED)
+      // ----------------------
+      else if (hasTier1Documents) {
+        let baseRecommendation = "";
+        let note = "";
 
-    else if (pga > 0.08 && stories <= 9) {
-      baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-    }
+        // Weak docs → add warning
+        if (hasWeakTier1Docs) {
+          note = " (Insufficient Document)";
+        }
 
-    else {
-      baseRecommendation = "Insufficient Document";
-      note = "";
-    }
-  }
+        // RC only (as per your logic)
+        if (buildingType === "RC") {
+          if (pga >= 0.01 && pga < 0.03) {
+            baseRecommendation = "ASCE41 Tier 1 - See Note 3";
+          } else if (pga >= 0.03 && pga <= 0.08 && stories <= 12) {
+            baseRecommendation = "ASCE41 Tier 1 - See Note 3";
+          } else if (pga > 0.08 && stories <= 9) {
+            baseRecommendation = "ASCE41 Tier 1 - See Note 3";
+          } else {
+            baseRecommendation = "Insufficient Document";
+            note = "";
+          }
+        }
 
-  // URM fallback (optional but safer)
-  else if (buildingType === "URM") {
-    baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-  }
+        // URM fallback (optional but safer)
+        else if (buildingType === "URM") {
+          baseRecommendation = "ASCE41 Tier 1 - See Note 3";
+        }
 
-  recommendation = baseRecommendation + note;
-  recommendationType = "tier1";
-  logicMatched = true;
-}
-      
-      
+        recommendation = baseRecommendation + note;
+        recommendationType = "tier1";
+        logicMatched = true;
+      }
 
       if (!logicMatched) {
         recommendation =
