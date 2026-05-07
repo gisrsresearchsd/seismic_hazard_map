@@ -1555,28 +1555,60 @@
 
       const hasStructuralDesignReport = selectedDocuments.includes(
         "Structural design report",
-      );
+      ); //1
       const hasArchitecturalDrawings = selectedDocuments.includes(
         "Architectural drawings",
-      );
+      ); //2
       const hasStructuralAsBuilt = selectedDocuments.includes(
         "Structural as-built drawings",
-      );
-      const hasDigitalModel = selectedDocuments.includes(
-        "Digital structural model (ETABS or equivalent)",
-      );
-      const hasGeotechnicalReport = selectedDocuments.includes(
-        "Geotechnical report",
-      );
+      ); //3
       const hasFloorPlan = selectedDocuments.includes(
         "Floor plan showing structural columns and walls location",
-      );
+      ); //4
+      const hasDigitalModel = selectedDocuments.includes(
+        "Digital structural model (ETABS or equivalent)",
+      ); //5
+      const hasGeotechnicalReport = selectedDocuments.includes(
+        "Geotechnical report",
+      ); //9
 
+      // Peer Review
       const hasPeerReviewDocuments =
         hasStructuralDesignReport &&
         hasArchitecturalDrawings &&
         hasStructuralAsBuilt &&
         hasDigitalModel;
+
+      // Tier 3 document
+      const tier3DocCount =
+        (hasArchitecturalDrawings ? 1 : 0) +
+        (hasStructuralAsBuilt ? 1 : 0) +
+        (hasGeotechnicalReport ? 1 : 0);
+
+      // ONLY Structural As-Built
+      // should NOT qualify for Tier 3
+
+      const isOnlyStructuralAsBuilt =
+        hasStructuralAsBuilt &&
+        !hasArchitecturalDrawings &&
+        !hasGeotechnicalReport;
+
+      // Tier 3 requires: (Architectural OR AsBuilt OR Geotechnical BUT NOT ONLY AsBuilt ALONE)
+      const hasAnyTier3Combo =
+        // URM:
+        // Any single Tier 3 doc is acceptable
+
+        (buildingType === "URM" && tier3DocCount >= 1) ||
+        // RC:
+        // Structural As-Built ALONE is NOT enough
+
+        (buildingType === "RC" &&
+          (tier3DocCount >= 2 ||
+            (tier3DocCount === 1 && !isOnlyStructuralAsBuilt)));
+
+      // Tier 1 documents
+      const hasTier1Documents = hasStructuralAsBuilt || hasFloorPlan;
+
       const hasOnlyStructuralReport =
         hasStructuralDesignReport &&
         !hasArchitecturalDrawings &&
@@ -1584,39 +1616,12 @@
         !hasDigitalModel &&
         !hasGeotechnicalReport &&
         !hasFloorPlan;
-      const hasTier3Documents =
-        hasArchitecturalDrawings &&
-        hasStructuralAsBuilt &&
-        hasGeotechnicalReport;
-      const tier3DocCount =
-        (hasArchitecturalDrawings ? 1 : 0) +
-        (hasStructuralAsBuilt ? 1 : 0) +
-        (hasGeotechnicalReport ? 1 : 0);
-
-      const isOnlyAsBuilt =
-        hasStructuralAsBuilt &&
-        !hasArchitecturalDrawings &&
-        !hasGeotechnicalReport;
-
-      const hasAnyTier3Combo =
-        tier3DocCount >= 2 || (tier3DocCount === 1 && !isOnlyAsBuilt);
-
-      const tier1DocCount =
-        (hasStructuralAsBuilt ? 1 : 0) + (hasFloorPlan ? 1 : 0);
-
-      const hasStrongTier1Docs = hasStructuralAsBuilt && hasFloorPlan;
-
-      const hasWeakTier1Docs = tier1DocCount === 1; // only one of them
-
-      const hasTier1Documents = hasStructuralAsBuilt || hasFloorPlan;
-
-      const isValidForDocs = isValidPropertyType(propertyType, seismicValue);
 
       let recommendation = "";
       let recommendationType = "";
       let logicMatched = false;
 
-      // Condition 5: Lease Renewal with Yes assessment
+      // Condition X: LEASE RENEWAL == YES
       if (propertyType === "Lease Renewal" && seismicValue === "yes") {
         recommendation = "Submit Document";
         recommendationType = "tier2";
@@ -1624,7 +1629,7 @@
       }
 
       // ----------------------
-      // STEP 2: PEER REVIEW
+      // Condition X: PEER REVIEW
       // ----------------------
       else if (hasPeerReviewDocuments) {
         recommendation = "Peer Review – See Note 2";
@@ -1632,87 +1637,45 @@
         logicMatched = true;
       }
 
-      // ----------------------
-      // STEP 3: HIGH-LEVEL REVIEW
-      // ----------------------
+      // Condition X: HIGH LEVEL REVIEW
       else if (hasOnlyStructuralReport) {
         recommendation = "High-Level Review – See Note 1";
         recommendationType = "tier1";
         logicMatched = true;
       }
 
-      // ----------------------
-      // STEP 4: TIER 3 (UPDATED)
-      // ----------------------
-      else if (hasAnyTier3Combo) {
-        let baseRecommendation = "";
-        let note = "";
 
-        // Full documents → no warning
+      // CONDITION X: TIER 3
+      else if (
+        (buildingType === "URM" && pga > 0.01) ||
+        (buildingType === "RC" &&
+          ((pga >= 0.03 && pga < 0.08 && stories >= 13) ||
+            (pga >= 0.08 && stories >= 9)))
+      ) {
+        // ALL REQUIRED TIER 3 DOCUMENTS
         if (tier3DocCount === 3) {
-          note = "";
-        }
-        // Partial documents → show warning
-        else {
-          note = " (Insufficient Document)";
+          recommendation = "ASCE41 Tier 3 - See Note 4";
+        } else {
+          recommendation = "ASCE41 Tier 3 - See Note 4 (Insufficient Document)";
         }
 
-        // URM
-        if (buildingType === "URM" && pga > 0.01) {
-          baseRecommendation = "ASCE41 Tier 3 - See Note 4";
-        }
-
-        // RC
-        else if (buildingType === "RC") {
-          if (pga >= 0.03 && pga < 0.08 && stories >= 13) {
-            baseRecommendation = "ASCE41 Tier 3 - See Note 4";
-          } else if (pga >= 0.08 && stories >= 9) {
-            baseRecommendation = "ASCE41 Tier 3 - See Note 4";
-          } else {
-            baseRecommendation = "Insufficient Document";
-          }
-        }
-
-        // Final output
-        recommendation = baseRecommendation + note;
         recommendationType = "tier3";
         logicMatched = true;
       }
 
-      // ----------------------
-      // STEP 5: TIER 1 (UPDATED)
-      // ----------------------
-      else if (hasTier1Documents) {
-        let baseRecommendation = "";
-        let note = "";
-
-        // Weak docs → add warning
-        if (hasWeakTier1Docs) {
-          note = " (Insufficient Document)";
+      // CONDITION X: TIER 1
+      if (
+        buildingType === "RC" &&
+        ((pga >= 0.01 && pga < 0.03) ||
+          (pga >= 0.03 && pga < 0.08 && stories <= 12) ||
+          (pga >= 0.08 && stories <= 8))
+      ) {
+        // Tier 1 possible
+        if (hasTier1Documents) {
+          recommendation = "ASCE41 Tier 1 - See Note 3";
+          recommendationType = "tier1";
+          logicMatched = true;
         }
-
-        // RC only (as per your logic)
-        if (buildingType === "RC") {
-          if (pga >= 0.01 && pga < 0.03) {
-            baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-          } else if (pga >= 0.03 && pga < 0.08 && stories <= 12) {
-            baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-          } else if (pga >= 0.08 && stories <= 8) {
-            baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-          } else {
-            baseRecommendation = "Insufficient Document";
-            note = "";
-          }
-        }
-
-        // URM fallback (optional but safer)
-        else if (buildingType === "URM") {
-          baseRecommendation = "ASCE41 Tier 1 - See Note 3";
-        }
-
-        recommendation = baseRecommendation + note;
-        recommendationType = "tier1";
-        logicMatched = true;
       }
 
       if (!logicMatched) {
